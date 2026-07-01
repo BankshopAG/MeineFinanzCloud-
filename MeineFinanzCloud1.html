@@ -1,0 +1,2374 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Meine FinanzCloud</title>
+<!--
+  MEINE FINANZDNA — eigenständige Seite, einfach im Browser öffnen.
+  Marke: Bankshop (Dachmarke) · Produkt "Meine FinanzDNA" -> führt in "Meine FinanzCloud".
+
+  HINWEISE FÜR EURE PROGRAMMIERER
+  - Alle Daten leben nur im Browser (Variable `state`). Keine Persistenz, kein Tracking.
+  - Es werden bewusst nur grobe Angaben über Regler erfasst: kein exaktes Einkommen, keine Steuer-ID.
+  - Datenübergabe: NUR die Funktion submitToSchnittstelle(payload). Hier eure echte
+    Schnittstelle (CRM / FinanzCloud) anbinden. Aktuell nur simuliert (console.log).
+  - KI-Auswertung: versucht die Anthropic-API; in PRODUKTION den Key NICHT ins Frontend
+    legen, sondern über euer Backend proxen. Bei Fehler greift ein regelbasierter Fallback.
+  - Bonusbeträge zentral in BONUS_CONFIG konfigurierbar.
+  - Berechnungen bewusst einfach & transparent ("grobe Schätzung", Annahmen sichtbar). Keine Beratung.
+-->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
+:root{
+  --ink:#0a142e; --ocean:#122a63; --cloud:#2e9bf0; --pulse:#3fe0c7;
+  --gold:#f6b43c; --paper:#eef4fb; --line:rgba(255,255,255,.12);
+  --txt:#eaf1fb; --muted:#9fb3d6; --warn:#ff9b6a;
+}
+*{box-sizing:border-box;}
+html,body{margin:0; min-height:100%;}
+body{
+  font-family:'Inter',system-ui,-apple-system,sans-serif; color:var(--txt);
+  -webkit-font-smoothing:antialiased;
+  background:
+    radial-gradient(120% 80% at 80% -10%, rgba(63,224,199,.16), transparent 60%),
+    radial-gradient(120% 80% at -10% 110%, rgba(46,155,240,.20), transparent 55%),
+    linear-gradient(180deg,#0a142e 0%, #0b1a3f 100%);
+  background-attachment:fixed;
+}
+.wrap{max-width:520px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; padding:0 18px 32px;}
+h1,h2,h3{font-family:'Space Grotesk',sans-serif; font-weight:700; line-height:1.08; letter-spacing:-.01em; margin:0;}
+p{margin:0; color:var(--muted); line-height:1.5;}
+.num{font-family:'Space Grotesk',sans-serif; font-variant-numeric:tabular-nums;}
+
+/* Kopf / DNA-Strang */
+.top{position:sticky; top:0; z-index:5; padding:16px 0 12px;
+  background:linear-gradient(180deg,rgba(10,20,46,.96),rgba(10,20,46,.6) 70%,transparent); backdrop-filter:blur(6px);}
+.brand{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;}
+.brand .logo{font-family:'Space Grotesk'; font-weight:700; font-size:15px; letter-spacing:.02em;}
+.brand .logo b{color:var(--cloud);} .brand .logo i{font-style:normal; color:var(--pulse);}
+.pts{font-family:'Space Grotesk'; font-weight:600; font-size:13px; color:var(--pulse);
+  background:rgba(63,224,199,.1); border:1px solid rgba(63,224,199,.3); padding:5px 10px; border-radius:999px;}
+.strand{display:flex; align-items:center; gap:6px;}
+.seg{flex:1; height:4px; border-radius:99px; background:rgba(255,255,255,.1);}
+.seg.on{background:linear-gradient(90deg,var(--cloud),var(--pulse));}
+.node{width:9px; height:9px; border-radius:50%; background:rgba(255,255,255,.18); flex:0 0 auto; transition:all .4s;}
+.node.on{background:var(--pulse); box-shadow:0 0 0 3px rgba(63,224,199,.18),0 0 12px rgba(63,224,199,.6);}
+.node.cur{background:var(--cloud); box-shadow:0 0 0 4px rgba(46,155,240,.25);}
+
+/* Screen */
+.screen{flex:1; display:flex; flex-direction:column; justify-content:center; padding:8px 0 4px; animation:slideIn .45s cubic-bezier(.2,.7,.2,1);}
+@keyframes slideIn{from{opacity:0; transform:translateY(14px);} to{opacity:1; transform:none;}}
+.eyebrow{font-family:'Space Grotesk'; font-weight:600; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--pulse); margin-bottom:10px;}
+.lead{font-size:15px; color:var(--muted); margin-top:10px;}
+.card{background:rgba(255,255,255,.045); border:1px solid var(--line); border-radius:18px; padding:18px; margin-top:16px;}
+
+/* Buttons */
+.btn{font-family:'Space Grotesk'; font-weight:600; font-size:16px; border:0; cursor:pointer; width:100%;
+  padding:15px 18px; border-radius:14px; color:#06122c; background:linear-gradient(90deg,var(--pulse),var(--cloud)); transition:transform .12s, filter .2s;}
+.btn:hover{filter:brightness(1.06);} .btn:active{transform:scale(.985);}
+.btn.ghost{background:transparent; color:var(--txt); border:1px solid var(--line);}
+.btn.gold{background:linear-gradient(90deg,#ffd27a,var(--gold)); color:#3a2600;}
+.btn:disabled{opacity:.45; cursor:not-allowed;}
+.btnrow{display:flex; gap:10px; margin-top:16px;}
+.back{background:none;border:0;color:var(--muted);font-size:13px;cursor:pointer;padding:10px 0;font-family:'Inter';width:100%;}
+.back:hover{color:var(--txt);}
+
+/* Slider */
+.field{margin:18px 0;}
+.field .lab{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px;}
+.field .lab span{font-size:14px; color:var(--txt);}
+.field .lab .val{font-family:'Space Grotesk'; font-weight:700; font-size:18px; color:var(--pulse);}
+input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:6px; border-radius:99px; background:rgba(255,255,255,.14); outline:none; margin:0;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:24px; height:24px; border-radius:50%; background:#fff; border:5px solid var(--cloud); box-shadow:0 2px 10px rgba(0,0,0,.4); cursor:pointer;}
+input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#fff;border:5px solid var(--cloud);cursor:pointer;}
+input[type=text],input[type=email],input[type=tel]{width:100%; background:rgba(255,255,255,.06); border:1px solid var(--line); border-radius:12px; padding:13px 14px; color:var(--txt); font-size:15px; font-family:'Inter';}
+input::placeholder{color:#6f82a8;}
+input:focus{outline:2px solid var(--cloud); outline-offset:1px;}
+
+/* Choices */
+.choices{display:grid; gap:9px; margin-top:6px;}
+.choices.two{grid-template-columns:1fr 1fr;}
+.chip{font-family:'Inter'; text-align:left; background:rgba(255,255,255,.05); border:1px solid var(--line); border-radius:12px; padding:13px 15px; color:var(--txt); font-size:14.5px; cursor:pointer; transition:.15s;}
+.chip:hover{border-color:rgba(63,224,199,.5);}
+.chip.sel{background:rgba(63,224,199,.13); border-color:var(--pulse); color:#fff;}
+
+/* Ergebnis */
+.res{margin-top:18px; background:rgba(46,155,240,.08); border:1px solid rgba(46,155,240,.25); border-radius:16px; padding:16px;}
+.res .rh{font-family:'Space Grotesk'; font-weight:600; font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--cloud); margin-bottom:12px;}
+.stat{display:flex; justify-content:space-between; align-items:baseline; padding:9px 0; border-bottom:1px solid rgba(255,255,255,.07);}
+.stat:last-child{border-bottom:0;}
+.stat .k{font-size:13.5px; color:var(--muted); max-width:62%;}
+.stat .v{font-family:'Space Grotesk'; font-weight:700; font-size:18px; color:var(--txt); text-align:right;}
+.stat .v.warn{color:var(--warn);}
+.assume{font-size:11.5px; color:#7286ac; margin-top:12px; line-height:1.5;}
+.ptsgain{margin-top:14px; text-align:center; font-family:'Space Grotesk'; font-weight:600; color:var(--pulse); font-size:15px;}
+
+/* Auswertung */
+.ring{display:block; margin:6px auto 4px;}
+.ringlabel{text-align:center; margin-bottom:8px;}
+.ringlabel .big{font-family:'Space Grotesk'; font-weight:700; font-size:13px; letter-spacing:.1em; text-transform:uppercase; color:var(--pulse);}
+.bar{margin:13px 0;}
+.bar .bl{display:flex; justify-content:space-between; font-size:13.5px; margin-bottom:6px;}
+.bar .bl b{font-family:'Space Grotesk'; color:var(--txt);}
+.track{height:9px; border-radius:99px; background:rgba(255,255,255,.1); overflow:hidden;}
+.fill{height:100%; border-radius:99px; background:linear-gradient(90deg,var(--cloud),var(--pulse)); width:0; transition:width 1s cubic-bezier(.2,.8,.2,1);}
+.fill.low{background:linear-gradient(90deg,#ff7a59,var(--gold));}
+.compare{text-align:center; margin-top:20px; font-size:14.5px; color:var(--txt);}
+.compare b{font-family:'Space Grotesk'; color:var(--pulse); font-size:17px;}
+.typ{text-align:center; font-family:'Space Grotesk'; font-weight:700; font-size:24px; margin:4px 0 2px;
+  background:linear-gradient(90deg,var(--pulse),var(--cloud)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;}
+
+/* KI */
+.ki{white-space:pre-wrap; font-size:14.5px; line-height:1.6; color:var(--txt);}
+.spin{width:22px;height:22px;border:3px solid rgba(255,255,255,.2);border-top-color:var(--pulse);border-radius:50%;animation:spin 1s linear infinite;display:inline-block;vertical-align:middle;margin-right:10px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* Bonus */
+.bonusbar{height:16px; border-radius:99px; background:rgba(255,255,255,.1); overflow:hidden; margin:10px 0;}
+.bonusfill{height:100%; background:linear-gradient(90deg,#ffd27a,var(--gold)); transition:width .8s cubic-bezier(.2,.8,.2,1);}
+.bonusval{text-align:center; font-family:'Space Grotesk'; font-weight:700; font-size:34px; color:var(--gold);}
+.row{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:13px 0; border-bottom:1px solid rgba(255,255,255,.08);}
+.row:last-child{border-bottom:0;}
+.row .rl{font-size:14px;} .row .ra{font-family:'Space Grotesk'; font-weight:600; color:var(--gold); font-size:14px;}
+.mini{font-family:'Space Grotesk'; font-weight:600; font-size:13px; padding:8px 14px; border-radius:10px; border:1px solid var(--pulse); background:rgba(63,224,199,.12); color:var(--pulse); cursor:pointer; white-space:nowrap;}
+.mini.done{border-color:rgba(255,255,255,.15); background:rgba(255,255,255,.06); color:var(--muted); cursor:default;}
+.sublabel{font-family:'Space Grotesk'; font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--cloud); margin-bottom:4px;}
+
+.foot{text-align:center; font-size:11px; color:#5f7197; margin-top:24px; line-height:1.5;}
+.toast{position:fixed; left:50%; bottom:24px; transform:translateX(-50%); z-index:30; background:#06122c; border:1px solid var(--pulse); color:var(--txt); padding:12px 18px; border-radius:12px; font-size:14px; box-shadow:0 10px 40px rgba(0,0,0,.5); animation:slideIn .3s;}
+
+@media (prefers-reduced-motion: reduce){ *{animation:none!important; transition:none!important;} }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<div id="toast-host"></div>
+
+<script>
+"use strict";
+
+/* ===================== KONFIGURATION ===================== */
+const BONUS_CONFIG = {
+  start: 100,            // eigenes Startguthaben bei FinanzCloud-Einrichtung (echtes Geld)
+  friendGets: 100,       // Startguthaben für den/die Eingeladene:n
+  maxInvites: 5,         // zählbare Empfehlungen
+  // Gestaffelter Empfehlungs-Bonus: erreichte Stufe zählt (einstufig)
+  tiers: [ {n:1, amount:50}, {n:3, amount:250}, {n:5, amount:500} ],
+  maxBonus: 500,
+  // Eigene Sofort-Boni (zusätzlich, sofort ausgezahlt)
+  actions: [
+    { id: "giro", label: "Kostenloses Girokonto eröffnen", amount: 50, url: "https://www.procheck24.de/einsurance/csp/doHomepageEntry.do?cspident=D380639C061EA86621F1DEA20571D531&p=3" },
+    { id: "gkv", label: "In eine günstigere Krankenkasse wechseln", amount: 100, url: "https://www.kassensucheservice.de/index.php?m=2001302&iframe=false&hint=false&untervermittler=0" },
+    { id: "kreditkarte", label: "Kostenlose Kreditkarte sichern", amount: 50, url: "https://www.procheck24.de/einsurance/csp/doHomepageEntry.do?cspident=D380639C061EA86621F1DEA20571D531&p=13" },
+  ],
+};
+const RETIRE_AGE = 67;
+const PAYOUT_YEARS = 20;
+const RENTE_ZINS = 0.03; // Verzinsung von vorhandenem Kapital und Sparbeitrag bis zur Rente
+
+const STEPS = ["intro","cloud","basis","rente","eigentum","vermoegen","familie","absicherung","auswertung","steuer","empfehlung","termin","ki"];
+const LEVELS = ["rente","eigentum","vermoegen","familie","absicherung"];
+const LABELS = { rente:"Rente", eigentum:"Eigentum", vermoegen:"Vermögen", familie:"Familie", absicherung:"Absicherung" };
+
+/* ===================== STATE ===================== */
+const state = {
+  step: "intro",
+  prio: { rente:3, eigentum:3, vermoegen:3, familie:3, absicherung:3, steuern:3 },
+  alter:38, alterPartner:38, haushalt:"paar", kinder:1, wohnstatus:"miete",
+  netto:2800, nettoSelf:1600, nettoPartner:1200, miete:950, vermoegen:15000, freiBudget:300, budgetPreset:false, selbststaendig:"nein",
+  erwProzent:48, zielNiveau:90, vorhandeneRente:0, vorhandenKapital:0,
+  wunsch:"unsicher", zusatzBudget:250, eigenkapital:20000,
+  anlageform:"etf", sparbetrag:250, laufzeit:20, rendite:6,
+  kindAlter:6, zielAlter:18, zielKapital:25000, startKapital:1000, familienBudget:75,
+  absVorhanden:false, absVorhandenPartner:false,
+  allocTotal:300, allocBasis:100, allocEtf:100, allocTagesgeld:50, allocGold:25, allocImmo:25,
+  anlageTyp:"lv", anlageBeitrag:100, anlageBestand:0, anlageJahre:25, anlageAblauf:45000,
+  autos:null, autoLocked:true, autoMehrUrl:"https://www.grosskundenzentrum-hamburg.de/anmeldung-html-key-tey0vxwr0xdd-b7zu",
+  ratenkredite:[], mieteinnahme:0, sanierungBetrag:0,
+  zEigen:3.9, tEigen:1.5, zSteuer:4.5, tSteuer:1.0, zSanier:6, jSanier:20,
+  baufiMode:"", rkOpen:false,
+  nebenJa:false, nebenSel:null,
+  cloudOn:false, actionsDone:{}, invites:0,
+  dnaNummer:null, beratungUnlocked:false,
+  partner:null,
+  zweitPerson:false,
+  referenzen:[],
+  feedback:{ gefallen:[], erwartung:[] },
+  docs:[], docConsent:false,
+  termin:{ thema:"", kanal:"", datum:"", slot:"", bestaetigt:false, offen:false },
+  pKunden:1, pPartner1:2, pPartner2:3, pProdPartner:1,
+  lead:{ name:"", name2:"", email:"", tel:"", einw:false },
+  kiText:"", kiLoading:false,
+};
+
+/* ===================== HELFER ===================== */
+const clamp = (v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+const eur = n => (isFinite(n)?Math.round(n):0).toLocaleString("de-DE")+" €";
+const eurK = n => n>=100000 ? Math.round(n/1000).toLocaleString("de-DE")+" Tsd. €" : eur(n);
+function fvAnnuity(pmt,annualPct,years){ const r=annualPct/100/12, n=years*12; return r===0?pmt*n:pmt*((Math.pow(1+r,n)-1)/r); }
+function pmtForTarget(target,annualPct,years){ const r=annualPct/100/12, n=years*12; return r===0?target/n:(target*r)/(Math.pow(1+r,n)-1); }
+
+function h(tag, props, children){
+  const e=document.createElement(tag);
+  if(props) for(const k in props){
+    const val=props[k];
+    if(val==null) continue;
+    if(k==="class") e.className=val;
+    else if(k==="html") e.innerHTML=val;
+    else if(k==="style") e.setAttribute("style",val);
+    else if(k.slice(0,2)==="on" && typeof val==="function") e.addEventListener(k.slice(2).toLowerCase(),val);
+    else e.setAttribute(k,val);
+  }
+  (children||[]).forEach(c=>{ if(c==null||c===false) return; e.appendChild(typeof c==="object"?c:document.createTextNode(String(c))); });
+  return e;
+}
+function toast(msg){
+  const host=document.getElementById("toast-host");
+  host.innerHTML="";
+  host.appendChild(h("div",{class:"toast"},[msg]));
+  setTimeout(()=>{ host.innerHTML=""; }, 2200);
+}
+
+/* ===================== BERECHNUNGEN ===================== */
+function calc(){
+  const d=state;
+  const netto = d.haushalt==="paar" ? (Number(d.nettoSelf)+Number(d.nettoPartner)) : Number(d.netto);
+  const paar = d.haushalt==="paar";
+  const nettoA = paar ? Number(d.nettoSelf) : Number(d.netto);
+  const nettoB = paar ? Number(d.nettoPartner) : 0;
+  const jahreBisRente=Math.max(0,RETIRE_AGE-d.alter);
+  const jahreBisRenteB = paar ? Math.max(0,RETIRE_AGE-d.alterPartner) : 0;
+  const gapPctMonatlich = Math.max(0, d.zielNiveau-d.erwProzent)/100;
+  const lueckeA = nettoA*gapPctMonatlich;
+  const lueckeB = paar ? nettoB*gapPctMonatlich : 0;
+  const zielRente=netto*d.zielNiveau/100;
+  const gesetzl=netto*d.erwProzent/100;
+  const renteGedeckt=gesetzl;
+  const renteLuecke=lueckeA+lueckeB;
+  const renteKapital=renteLuecke*12*PAYOUT_YEARS;
+  const kapitalZukunft=Math.round(Number(d.vorhandenKapital)*Math.pow(1+RENTE_ZINS,jahreBisRente) + fvAnnuity(Number(d.vorhandeneRente),RENTE_ZINS*100,jahreBisRente));
+  const renteRest=Math.max(0,renteKapital-kapitalZukunft);
+  const fvFaktor=fvAnnuity(1,RENTE_ZINS*100,jahreBisRente);
+  const noetigerSparbeitrag=(renteRest>0&&fvFaktor>0)?Math.round(renteRest/fvFaktor):0;
+  const grenzFor = n => n<2500?0.30:(n<4500?0.35:0.42);
+  const basisBeitragA = nettoA*12*0.10, basisBeitragB = paar ? nettoB*12*0.10 : 0;
+  const basisSteuerA = Math.round(basisBeitragA*grenzFor(nettoA));
+  const basisSteuerB = Math.round(basisBeitragB*grenzFor(nettoB));
+  const basisSteuer = basisSteuerA + basisSteuerB;
+  const basisBeitrag = Math.round((basisBeitragA+basisBeitragB)/12);
+
+  const kapitalMode=(d.wohnstatus!=="miete")||(d.wunsch==="kapitalanlage");
+  const rate=kapitalMode?d.zusatzBudget:(d.miete+d.zusatzBudget);
+  const grenzSteuer = grenzFor(netto);
+  const annuitaet=0.045, mietRendite=0.045;
+  let darlehen, immoRahmen;
+  if(kapitalMode){
+    // 80 % der Miete + monatlicher Eigenanteil bedienen die Annuität; Miete = Rendite auf den Objektwert
+    const nenner=annuitaet-0.8*mietRendite;
+    darlehen=Math.max(0,(0.8*mietRendite*d.eigenkapital + 12*d.zusatzBudget)/(nenner>0?nenner:1));
+    immoRahmen=darlehen+d.eigenkapital;
+  } else {
+    darlehen=rate*12/annuitaet;
+    immoRahmen=darlehen+d.eigenkapital;
+  }
+
+  const zielVermoegen=fvAnnuity(d.sparbetrag,d.rendite,d.laufzeit);
+  const eingezahlt=d.sparbetrag*12*d.laufzeit;
+  const ertrag=Math.max(0,zielVermoegen-eingezahlt);
+
+  const kindJahre=Math.max(1,d.zielAlter-d.kindAlter);
+  const startGrown=d.startKapital*Math.pow(1.03,kindJahre);
+  const familieZiel=Math.max(0,d.zielKapital-startGrown);
+  const familieRate=pmtForTarget(familieZiel,3,kindJahre);
+
+  const arbeitskraftA = nettoA*12*jahreBisRente;
+  const arbeitskraftB = paar ? nettoB*12*jahreBisRenteB : 0;
+  const arbeitskraft = arbeitskraftA + arbeitskraftB;
+  const ruecklagenMonate=netto>0?d.vermoegen/netto:0;
+
+  const annualNet=netto*12;
+  const covRente=renteLuecke<=0?100:clamp(kapitalZukunft/Math.max(1,renteKapital)*100,0,100);
+  const ekQuote = kapitalMode ? 0.10 : 0.15; // Kapitalanlage 10 %, Eigennutzung 15 %
+  const covEigentum = d.wohnstatus==="eigentum_frei" ? 100
+    : d.wohnstatus==="eigentum_kredit" ? clamp(70+(d.eigenkapital/Math.max(1,ekQuote*immoRahmen))*15,0,100)
+    : clamp(d.eigenkapital/Math.max(1,ekQuote*immoRahmen)*100,0,100);
+  const covVermoegen=clamp(d.vermoegen/Math.max(1,annualNet)*100,0,100);
+  const familieReached=startGrown+fvAnnuity(d.familienBudget,3,kindJahre);
+  const covFamilie=d.kinder===0?100:clamp(familieReached/Math.max(1,d.zielKapital)*100,0,100);
+  const insuredN=(d.absVorhanden?1:0)+(paar?(d.absVorhandenPartner?1:0):0), denomA=paar?2:1;
+  const covAbs=clamp((insuredN/denomA)*70+Math.min(ruecklagenMonate,6)/6*30,0,100);
+  const covSteuern = d.selbststaendig==="haupt"?70:(d.selbststaendig==="nebenbei"?50:20);
+  const cov={ rente:covRente, eigentum:covEigentum, vermoegen:covVermoegen, familie:covFamilie, absicherung:covAbs, steuern:covSteuern };
+  const scores={ rente:Math.round(covRente), eigentum:Math.round(covEigentum), vermoegen:Math.round(covVermoegen), familie:Math.round(covFamilie), absicherung:Math.round(covAbs) };
+  const total=Object.values(scores).reduce((a,b)=>a+b,0);
+  const pct=Math.round(clamp(100/(1+Math.exp(-(total-255)/60)),5,96));
+
+  const TYP_NAMES={ rente:"Vorsorge-Typ", eigentum:"Immobilien-Typ", vermoegen:"Vermögensaufbauer", familie:"Familienmensch", absicherung:"Sicherheits-Typ", steuern:"Steuer-Optimierer" };
+  const prioTop=Object.keys(d.prio).reduce((a,b)=>d.prio[b]>d.prio[a]?b:a, "rente");
+  const finanztyp=TYP_NAMES[prioTop];
+  const best=LEVELS.reduce((a,b)=>scores[b]>scores[a]?b:a);
+  const worst=LEVELS.reduce((a,b)=>scores[b]<scores[a]?b:a);
+
+  return { netto,cov,grenzSteuer,kapitalMode,ekQuote,kapitalZukunft,renteRest,noetigerSparbeitrag,jahreBisRente,jahreBisRenteB,lueckeA,lueckeB,zielRente,gesetzl,renteLuecke,renteKapital,basisSteuer,basisBeitrag,
+    rate,darlehen,immoRahmen,zielVermoegen,eingezahlt,ertrag,
+    familieRate,familieReached,kindJahre,arbeitskraft,arbeitskraftA,arbeitskraftB,ruecklagenMonate,
+    scores,total,pct,finanztyp,best,worst };
+}
+
+/* ===================== DATENÜBERGABE (Platzhalter) ===================== */
+function submitToSchnittstelle(payload){
+  // TODO(Devs): echte Schnittstelle / CRM / FinanzCloud-Anbindung hier.
+  console.log("[Schnittstelle] Lead-Payload:", payload);
+  return Promise.resolve({ ok:true });
+}
+
+/* ===================== KI-AUSWERTUNG ===================== */
+async function runKi(){
+  state.kiLoading=true; state.kiText=""; render();
+  const c=calc();
+  const profil={ finanztyp:c.finanztyp, alter:state.alter, alterPartner:(state.haushalt==="paar"?state.alterPartner:null), haushalt:state.haushalt, kinder:state.kinder,
+    gesamtpunkte:c.total, scores:c.scores, staerkster:LABELS[c.best], groessteLuecke:LABELS[c.worst],
+    renteLueckeMonat:Math.round(c.renteLuecke), immobilienRahmen:Math.round(c.immoRahmen), zielVermoegen:Math.round(c.zielVermoegen) };
+  const prompt='Du bist ein freundlicher, seriöser Finanz-Assistent für "Meine FinanzDNA". Erstelle eine kurze, persönliche Auswertung auf Deutsch (Du-Form), warm und motivierend, ohne konkrete Produkte zu verkaufen und ohne Heilsversprechen. KEIN Markdown, keine Sternchen. Genau vier Abschnitte, jeweils Überschrift in Großbuchstaben gefolgt von 1-2 Sätzen, getrennt durch eine Leerzeile:\n\nZUSAMMENFASSUNG\nSTÄRKSTER BEREICH\nGRÖSSTE LÜCKE\nNÄCHSTER SCHRITT\n\nProfil (grobe Selbsteinschätzung): '+JSON.stringify(profil);
+
+  const fallback = "ZUSAMMENFASSUNG\nDeine FinanzDNA erreicht "+c.total+" von 500 Punkten – eine solide Grundlage mit klarem Entwicklungspotenzial.\n\nSTÄRKSTER BEREICH\n"+LABELS[c.best]+": Hier bist du bereits gut aufgestellt. Diese Stärke lässt sich gezielt ausbauen.\n\nGRÖSSTE LÜCKE\n"+LABELS[c.worst]+": Hier liegt aktuell dein größtes ungenutztes Potenzial"+((c.renteLuecke>0&&c.worst==="rente")?(" – rechnerisch fehlen rund "+eur(c.renteLuecke)+" pro Monat im Ruhestand"):"")+".\n\nNÄCHSTER SCHRITT\nSichere deine FinanzDNA in der FinanzCloud und besprich die größte Lücke in einem kostenlosen Strategie-Termin.";
+
+  try{
+    const ctrl = new AbortController();
+    const timer = setTimeout(()=>ctrl.abort(), 8000);
+    const res = await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST", headers:{ "Content-Type":"application/json" }, signal:ctrl.signal,
+      body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:1000, messages:[{role:"user",content:prompt}] })
+    });
+    clearTimeout(timer);
+    const data=await res.json();
+    const text=(data.content||[]).map(x=>x.text||"").join("\n").trim();
+    state.kiText = text || fallback;
+  }catch(e){
+    state.kiText = fallback;
+  }finally{
+    state.kiLoading=false;
+    if(state.step==="ki") render();
+  }
+}
+
+/* ===================== NAVIGATION ===================== */
+function go(step){ state.step=step; render(); window.scrollTo({top:0,behavior:"smooth"}); if(step==="ki" && !state.kiText && !state.kiLoading) runKi(); }
+function ensureDNA(){ if(!state.dnaNummer) state.dnaNummer=Math.floor(100+Math.random()*900); return state.dnaNummer; }
+function printExpertise(){
+  const c=calc();
+  const esc=s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const N=v=>Number(v||0);
+  const paar=state.haushalt==="paar";
+  const mapHaus={allein:"Single-Haushalt",paar:"Haushalt zu zweit"};
+  const mapWohn={miete:"zur Miete",eigentum_kredit:"Eigentum (mit Kredit)",eigentum_frei:"Eigentum (abbezahlt)"};
+  const mapSelb={nein:"Nein",nebenbei:"nebenberuflich",haupt:"hauptberuflich"};
+  const mapWunsch={eigennutzung:"Selbst darin wohnen",kapitalanlage:"Kapitalanlage (vermieten)",unsicher:"noch unsicher"};
+  const mapAnl={lv:"Lebens-/Rentenversicherung",bank:"Bank-/Bausparen",fonds:"Fonds / ETF",gold:"Edelmetall / Gold",keine:"noch nichts"};
+  const jn=v=>v?"vorhanden":"nein / unsicher";
+
+  const sections=[];
+  sections.push(["Haushalt & Einkommen","#64748b",[
+    ["Haushalt",mapHaus[state.haushalt]||state.haushalt],
+    ["Alter",state.alter+" J."+(paar?" \u00b7 Partner:in "+state.alterPartner+" J.":"")],
+    ["Kinder",state.kinder>0?state.kinder:"keine"],
+    ["Netto / Monat", paar ? ("~"+eur(N(state.nettoSelf)+N(state.nettoPartner))) : ("~"+eur(N(state.netto)))],
+    ["Selbstst\u00e4ndig",mapSelb[state.selbststaendig]||state.selbststaendig],
+    ["Wohnen",mapWohn[state.wohnstatus]||state.wohnstatus],
+    (state.wohnstatus==="miete"?["Miete / Monat",eur(N(state.miete))]:state.wohnstatus==="eigentum_kredit"?["Rate / Monat",eur(N(state.miete))]:null)
+  ]]);
+  sections.push(["Altersvorsorge / Rente","#2563eb",[
+    ["Zielniveau",state.zielNiveau+" % vom Netto"],
+    ["Erw. gesetzl. Rente",state.erwProzent+" %"],
+    ["Sparbeitrag",eur(N(state.vorhandeneRente))+" /Mon."],
+    ["Vorhandenes Kapital",eurK(N(state.vorhandenKapital))]
+  ]]);
+  const eigRows=[["Ziel",mapWunsch[state.wunsch]||state.wunsch]];
+  if(state.wunsch!=="unsicher") eigRows.push(["Zus\u00e4tzl. /Monat",eur(N(state.zusatzBudget))],["Eigenkapital",eurK(N(state.eigenkapital))]);
+  sections.push(["Eigentum / Wohnen","#16a34a",eigRows]);
+  const verRows=[["Anlageform",mapAnl[state.anlageTyp]||state.anlageTyp]];
+  if(state.anlageTyp!=="keine") verRows.push(["Beitrag",eur(N(state.anlageBeitrag))+" /Mon."],["Heutiger Wert",eurK(N(state.anlageBestand))],["Laufzeit",state.anlageJahre+" J."],["Auszahlung",eurK(N(state.anlageAblauf))]);
+  sections.push(["Verm\u00f6gen / Geldanlage","#d97706",verRows]);
+  if(state.kinder>0){
+    sections.push(["Familie & Kinder","#7c3aed",[
+      ["Kind heute",state.kindAlter+" J."],
+      ["Zielalter",state.zielAlter+" J."],
+      ["Zielkapital",eurK(N(state.zielKapital))],
+      ["Startkapital",eurK(N(state.startKapital))],
+      ["Budget",eur(N(state.familienBudget))+" /Mon."]
+    ]]);
+  }
+  const absRows=[[paar?"Absicherung (du)":"Absicherung",jn(state.absVorhanden)]];
+  if(paar) absRows.push(["Absicherung (Partner:in)",jn(state.absVorhandenPartner)]);
+  sections.push(["Absicherung","#0d9488",absRows]);
+  sections.push(["Ziele & W\u00fcnsche","#0891b2",[
+    ["Monatlich f\u00fcr Ziele",eur(N(state.freiBudget))+" /Mon."],
+    ["Gesch\u00e4tztes Verm\u00f6gen",eurK(N(state.vermoegen))]
+  ]]);
+  const secHtml=sections.map(s=>{
+    const rows=s[2].filter(Boolean).map(r=>'<tr><td class="k">'+esc(r[0])+'</td><td class="v">'+esc(r[1])+'</td></tr>').join("");
+    return '<div class="card" style="--ac:'+s[1]+'"><div class="ch">'+esc(s[0])+'</div><table>'+rows+'</table></div>';
+  }).join("");
+
+  const AREAS=[["rente","Altersvorsorge / Rente","#2563eb"],["eigentum","Eigentum / Immobilie","#16a34a"],["vermoegen","Verm\u00f6gen / Geldanlage","#d97706"],["familie","Familie & Kinder","#7c3aed"],["absicherung","Absicherung","#0d9488"],["steuern","Steuern & Subventionen","#64748b"]];
+  const standRows=AREAS.map(a=>{ const pct=Math.round(c.cov[a[0]]); return '<div class="srow"><div class="sl">'+a[1]+'</div><div class="bar"><div style="width:'+pct+'%;background:'+a[2]+'"></div></div><div class="sp">'+pct+'%</div></div>'; }).join("");
+
+  function kiBlocks(t){
+    const labels=["ZUSAMMENFASSUNG","ST\u00c4RKSTER BEREICH","GR\u00d6SSTE L\u00dcCKE","N\u00c4CHSTER SCHRITT"];
+    const out=[];
+    for(let i=0;i<labels.length;i++){
+      const s=t.indexOf(labels[i]); if(s<0){ out.push(null); continue; }
+      let e=t.length; for(let j=i+1;j<labels.length;j++){ const n=t.indexOf(labels[j]); if(n>s){ e=n; break; } }
+      out.push(t.slice(s+labels[i].length,e).trim());
+    }
+    return out;
+  }
+  const kb=kiBlocks(state.kiText||"");
+  const kiMeta=[["Zusammenfassung","#1e3a5f"],["Deine St\u00e4rke","#16a34a"],["Gr\u00f6\u00dfte L\u00fccke","#d97706"],["N\u00e4chster Schritt","#2563eb"]];
+  let kiHtml="";
+  if(kb.some(Boolean)){
+    kiHtml='<div class="kigrid">'+kb.map((txt,i)=> txt ? '<div class="kibox" style="--ac:'+kiMeta[i][1]+'"><div class="kih">'+kiMeta[i][0]+'</div><div class="kit">'+esc(txt).replace(/\n/g,"<br>")+'</div></div>' : "").join("")+'</div>';
+  } else {
+    kiHtml='<div class="kibox" style="--ac:#1e3a5f"><div class="kit">'+(esc(state.kiText).replace(/\n/g,"<br>")||"(noch nicht erstellt)")+'</div></div>';
+  }
+
+  const today=new Date().toLocaleDateString("de-DE",{day:"2-digit",month:"long",year:"numeric"});
+  const kundeName=[state.lead.name,state.lead.name2].filter(s=>String(s||"").trim()).map(esc).join(" &amp; ");
+  let terminHtml="";
+  const tm=state.termin;
+  if(tm && (tm.thema||tm.bestaetigt||tm.datum||tm.offen)){
+    let rows;
+    if(tm.offen){ rows=[["Terminwunsch","Offen – telefonische Rücksprache"]]; if(tm.thema) rows.push(["Thema",tm.thema]); }
+    else rows=[["Thema",tm.thema||"—"],["Kanal",kanalLabel(tm.kanal)||"—"],["Wunschtermin",(tm.datum?tm.datum+(tm.slot?" · "+tm.slot+" Uhr":""):"—")],["Status",tm.bestaetigt?"angefragt":"in Auswahl"]];
+    terminHtml='<div class="card" style="--ac:#1d5fae">'+'<table>'+rows.map(r=>'<tr><td class="k">'+esc(r[0])+'</td><td class="v">'+esc(r[1])+'</td></tr>').join("")+'</table></div>';
+  }
+  let refHtml="";
+  if(state.referenzen && state.referenzen.length){
+    refHtml='<div class="grid">'+state.referenzen.map((r,i)=>{
+      const sub=[r.email,r.tel].filter(Boolean).map(esc).join(" · ");
+      return '<div class="card" style="--ac:#0d9488"><div class="ch">Referenz '+(i+1)+'</div><div style="font-size:13px;font-weight:700;color:#1e293b">'+esc(r.name||"")+'</div>'+(sub?'<div style="font-size:11.5px;color:#6b7c93;margin-top:2px">'+sub+'</div>':"")+'</div>';
+    }).join("")+'</div>';
+  }
+  let fbHtml="";
+  const fbArr=(x)=>Array.isArray(x)?x:(x?[x]:[]);
+  const fbG=fbArr(state.feedback&&state.feedback.gefallen), fbE=fbArr(state.feedback&&state.feedback.erwartung);
+  if(fbG.length||fbE.length){
+    const fbrow=(q,items)=> items.length?'<div class="kibox" style="--ac:#7c3aed"><div class="kih">'+esc(q)+'</div><div class="kit">'+items.map(esc).join("<br>")+'</div></div>':"";
+    fbHtml='<div class="kigrid">'+fbrow("Am besten gefallen",fbG)+fbrow("Erwartung an den Termin",fbE)+'</div>';
+  }
+  let secNo=3, extra="";
+  if(terminHtml){ secNo++; extra+='<div class="sec"><div class="sh"><span class="n">'+secNo+'</span>Vereinbarter Termin</div>'+terminHtml+'</div>'; }
+  if(refHtml){ secNo++; extra+='<div class="sec"><div class="sh"><span class="n">'+secNo+'</span>Deine Referenzen</div>'+refHtml+'</div>'; }
+  if(fbHtml){ secNo++; extra+='<div class="sec"><div class="sh"><span class="n">'+secNo+'</span>Dein Feedback</div>'+fbHtml+'</div>'; }
+  const html='<!doctype html><html lang="de"><head><meta charset="utf-8"><title>FinanzDNA '+(state.dnaNummer||"")+' '+esc(state.lead.name||"")+'</title><style>'+
+    '*{box-sizing:border-box}'+
+    '@page{size:A4;margin:0}'+
+    'body{font-family:"Segoe UI",Arial,Helvetica,sans-serif;color:#16243a;margin:0;background:#fff;font-size:12px}'+
+    '.wrap{max-width:760px;margin:0 auto;padding:16px 30px 24px}'+
+    '.head{background:linear-gradient(135deg,#0b2545 0%,#143d72 60%,#1d5fae 100%);color:#fff;padding:22px 30px 22px}'+
+    '.head .wrap2{max-width:760px;margin:0 auto}'+
+    '.brand{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:#9ec6ff;font-weight:700}'+
+    '.head h1{font-size:22px;margin:5px 0 11px;font-weight:800}'+
+    '.meta{display:flex;flex-wrap:wrap;gap:5px 16px;font-size:12px;color:#cfe2ff}'+
+    '.meta b{color:#fff}'+
+    '.heroRow{display:flex;gap:12px;margin:16px 0 18px}'+
+    '.hero{flex:1;background:#fff;border:1px solid #e6eaf2;border-radius:12px;padding:11px 13px}'+
+    '.hero .l{font-size:10px;color:#6b7c93;text-transform:uppercase;letter-spacing:.05em;font-weight:700}'+
+    '.hero .b{font-size:25px;font-weight:800;color:#143d72;margin-top:2px}'+
+    '.hero .s{font-size:14px;font-weight:800;color:#143d72;margin-top:3px;line-height:1.2}'+
+    '.sec{margin:0 0 15px;break-inside:avoid}'+
+    '.sh{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:800;color:#0b2545;margin:0 0 8px}'+
+    '.sh .n{display:inline-flex;width:22px;height:22px;border-radius:50%;background:#143d72;color:#fff;font-size:12px;align-items:center;justify-content:center;flex:0 0 auto}'+
+    '.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}'+
+    '.card{border:1px solid #e9edf4;border-left:3px solid var(--ac);border-radius:9px;padding:8px 11px;break-inside:avoid}'+
+    '.ch{font-size:11.5px;font-weight:800;color:var(--ac);margin-bottom:3px}'+
+    '.card table{width:100%;border-collapse:collapse}'+
+    '.card td{padding:2px 0;font-size:11px;vertical-align:top;line-height:1.3}'+
+    '.card td.k{color:#6b7c93;padding-right:8px}.card td.v{text-align:right;font-weight:700;color:#1e293b}'+
+    '.srow{display:flex;align-items:center;gap:10px;margin:5px 0;break-inside:avoid}'+
+    '.srow .sl{width:165px;font-size:11.5px;color:#334155;flex:0 0 auto}'+
+    '.srow .bar{flex:1;height:9px;background:#eef1f6;border-radius:5px;overflow:hidden}'+
+    '.srow .bar>div{height:100%;border-radius:5px}'+
+    '.srow .sp{width:40px;text-align:right;font-size:11.5px;font-weight:800;color:#143d72}'+
+    '.kigrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}'+
+    '.kibox{border:1px solid #e9edf4;border-top:3px solid var(--ac);border-radius:9px;padding:9px 12px;break-inside:avoid}'+
+    '.kih{font-size:11.5px;font-weight:800;color:var(--ac);margin-bottom:3px}'+
+    '.kit{font-size:11.5px;line-height:1.45;color:#1e293b}'+
+    '.foot{border-top:1px solid #e6eaf2;margin-top:8px;padding-top:9px;color:#8893a8;font-size:10px}'+
+    '@media print{html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}.head,.sec,.card,.kibox,.srow,.heroRow{break-inside:avoid}}'+
+    '</style></head><body>'+
+    '<div class="head"><div class="wrap2"><div class="brand">Meine FinanzCloud</div><h1>Deine strategische Finanz-Expertise</h1>'+
+      '<div class="meta"><span>FinanzDNA <b>#'+(state.dnaNummer||"\u2014")+'</b></span>'+(kundeName?'<span>Name <b>'+kundeName+'</b></span>':"")+'<span>'+today+'</span></div>'+
+      (state.partner?'<div class="meta" style="margin-top:6px;border-top:1px solid rgba(255,255,255,.18);padding-top:8px"><span>Dein Ansprechpartner <b>'+esc(state.partner.name||"")+'</b></span>'+(state.partner.tel?'<span><b>'+esc(state.partner.tel)+'</b></span>':"")+(state.partner.email?'<span><b>'+esc(state.partner.email)+'</b></span>':"")+'</div>':"")+
+    '</div></div>'+
+    '<div class="wrap">'+
+    '<div class="heroRow"><div class="hero"><div class="l">Gesamt-Score</div><div class="b">'+c.total+' <span style="font-size:16px;color:#6b7c93">/ 500</span></div></div>'+
+      '<div class="hero"><div class="l">Dein Finanztyp</div><div class="s">'+esc(c.finanztyp)+'</div></div>'+
+      '<div class="hero"><div class="l">St\u00e4rkster Bereich</div><div class="s">'+esc(LABELS[c.best])+'</div></div></div>'+
+    '<div class="sec"><div class="sh"><span class="n">1</span>Deine Ausgangslage</div><div class="grid">'+secHtml+'</div></div>'+
+    '<div class="sec"><div class="sh"><span class="n">2</span>Dein Stand je Bereich</div>'+standRows+'</div>'+
+    '<div class="sec"><div class="sh"><span class="n">3</span>Strategische Auswertung</div>'+kiHtml+'</div>'+
+    extra+
+    '<div class="foot">Vereinfachte Beispielrechnung auf Basis deiner Angaben \u2013 keine Anlage- oder Steuerberatung im rechtlichen Sinne. Erstellt mit Meine FinanzCloud \u00b7 FinanzDNA #'+(state.dnaNummer||"\u2014")+'</div>'+
+    '</div></body></html>';
+  const w=window.open("","_blank");
+  if(!w){ toast("Bitte Pop-ups erlauben, um zu drucken"); return; }
+  w.document.write(html); w.document.close(); w.focus(); setTimeout(()=>{ try{ w.print(); }catch(e){} },350);
+}
+function saveToPC(){
+  try{
+    const slug=(state.lead.name||"").replace(/[^0-9A-Za-zäöüÄÖÜß \-]/g,"").trim().replace(/\s+/g,"-");
+    const fname="FinanzDNA-"+(state.dnaNummer||"export")+(slug?("-"+slug):"")+".json";
+    const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a"); a.href=url; a.download=fname;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    toast("Gespeichert: "+fname);
+  }catch(e){ toast("Speichern nicht möglich"); }
+}
+function loadFromFile(file){
+  const r=new FileReader();
+  r.onload=()=>{ try{ const obj=JSON.parse(r.result); Object.assign(state,obj); state.beratungUnlocked=true; if(!state.dnaNummer) ensureDNA(); toast("Expertise geladen · Beratung frei · #"+state.dnaNummer); go("auswertung"); }catch(e){ toast("Datei konnte nicht gelesen werden"); } };
+  r.readAsText(file);
+}
+function loadControl(opts){
+  opts=opts||{};
+  const loadIn=h("input",{type:"file",accept:"application/json",style:"display:none"});
+  loadIn.addEventListener("change",()=>{ if(loadIn.files&&loadIn.files[0]) loadFromFile(loadIn.files[0]); });
+  const btn = opts.button
+    ? h("button",{class:"mini"},["Expertise laden"])
+    : h("span",{style:"cursor:pointer;color:var(--muted);opacity:.6;font-size:12px;border-bottom:1px solid rgba(255,255,255,.12);padding-bottom:1px"},["Gespeicherte Expertise laden"]);
+  btn.addEventListener("click",()=>loadIn.click());
+  return h("div",{style:"text-align:center;margin-top:"+(opts.mt||20)+"px"},[ btn, loadIn ]);
+}
+function steps(){ if(state.beratungUnlocked){ const a=STEPS.slice(); const i=a.indexOf("vermoegen"); if(i>=0 && a.indexOf("invest")<0) a.splice(i+1,0,"invest"); return a; } return STEPS; }
+function idx(){ return steps().indexOf(state.step); }
+function next(){ const s=steps(); go(s[Math.min(s.length-1, idx()+1)]); }
+function prev(){ const s=steps(); go(s[Math.max(0, idx()-1)]); }
+function levelDone(){ return LEVELS.filter(l=>idx()>STEPS.indexOf(l)); }
+function points(){ const c=calc(); return levelDone().reduce((a,l)=>a+c.scores[l],0); }
+function referralBonus(){
+  if(!state.cloudOn) return 0;
+  let b=0; BONUS_CONFIG.tiers.forEach(t=>{ if(state.invites>=t.n) b=t.amount; }); return b;
+}
+function selfBonus(){
+  let b=0; BONUS_CONFIG.actions.forEach(a=>{ if(state.actionsDone[a.id]) b+=a.amount; }); return b;
+}
+function nextTierText(){
+  if(!state.cloudOn) return "Zuerst FinanzCloud einrichten – dann zählt jede Referenz.";
+  const next=BONUS_CONFIG.tiers.find(t=>state.invites<t.n);
+  if(next){ const r=next.n-state.invites; return "Noch "+r+" "+(r===1?"Referenz":"Referenzen")+" bis "+eur(next.amount)+"."; }
+  return "Höchste Stufe erreicht – "+eur(BONUS_CONFIG.maxBonus)+" gesichert.";
+}
+
+/* ===================== BAUSTEINE ===================== */
+function slider(label,key,min,max,step,fmt,oninput){
+  const valSpan=h("span",{class:"val"});
+  const setLbl=v=>valSpan.textContent=fmt?fmt(v):v;
+  setLbl(state[key]);
+  const input=h("input",{type:"range",min:min,max:max,step:step||1});
+  input.value=state[key];
+  input.addEventListener("input",()=>{ state[key]=Number(input.value); setLbl(state[key]); if(oninput) oninput(); });
+  return h("div",{class:"field"},[ h("div",{class:"lab"},[ h("span",null,[label]), valSpan ]), input ]);
+}
+function prioSlider(label,key){
+  const words=["unwichtig","eher gering","neutral","wichtig","sehr wichtig"];
+  const valSpan=h("span",{class:"val"});
+  valSpan.textContent=words[state.prio[key]-1];
+  const input=h("input",{type:"range",min:1,max:5,step:1});
+  input.value=state.prio[key];
+  input.addEventListener("input",()=>{ state.prio[key]=Number(input.value); valSpan.textContent=words[state.prio[key]-1]; });
+  return h("div",{class:"field"},[ h("div",{class:"lab"},[ h("span",null,[label]), valSpan ]), input ]);
+}
+function choices(key,options,two,onchange){
+  const wrap=h("div",{class:"choices"+(two?" two":"")});
+  options.forEach(o=>{
+    const b=h("button",{class:"chip"+(state[key]===o.v?" sel":"")},[o.l]);
+    b.addEventListener("click",()=>{ state[key]=o.v; Array.from(wrap.children).forEach((c,i)=>c.classList.toggle("sel",options[i].v===o.v)); if(onchange) onchange(); });
+    wrap.appendChild(b);
+  });
+  return wrap;
+}
+function statRow(k,v,warn){ return '<div class="stat"><div class="k">'+k+'</div><div class="v'+(warn?' warn':'')+'">'+v+'</div></div>'; }
+
+function header(){
+  const done=levelDone();
+  const strand=h("div",{class:"strand"});
+  LEVELS.forEach((l,i)=>{
+    if(i>0){ const segOn = done.includes(LEVELS[i-1]); strand.appendChild(h("div",{class:"seg"+(segOn?" on":"")})); }
+    const cur=state.step===l;
+    strand.appendChild(h("div",{class:"node"+(done.includes(l)?" on":"")+(cur?" cur":""),title:LABELS[l],style:"cursor:pointer",onClick:()=>go(l)}));
+  });
+  return h("div",{class:"top"},[
+    h("div",{class:"brand"},[
+      h("div",{class:"logo",html:'MEINE <b>FINANZ</b><i>CLOUD</i>'}),
+      h("div",{style:"text-align:right;line-height:1.2"},[
+        (state.partner&&state.partner.name)?h("div",{style:"font-size:11.5px;color:#eaf1fb;font-weight:600;font-family:Space Grotesk"},[state.partner.name]):h("span"),
+        h("div",{class:"pts num",style:"font-size:11px;color:var(--muted)"},[points()+" Pkt"])
+      ])
+    ]),
+    strand
+  ]);
+}
+
+function blockNav(current){
+  const blocks=[["cloud","Cloud"],["empfehlung","Referenz"],["termin","Termin"],["ki","Expertise"]];
+  const wrap=h("div",{style:"display:flex;gap:6px;margin-bottom:16px"});
+  blocks.forEach(([step,label])=>{
+    const on=current===step;
+    const b=h("button",{style:"flex:1;padding:8px 4px;border-radius:9px;font-size:12px;line-height:1.1;font-weight:"+(on?"700":"500")+";cursor:pointer;transition:all .15s;border:1px solid "+(on?"var(--cloud)":"var(--line)")+";background:"+(on?"rgba(46,155,240,.14)":"transparent")+";color:"+(on?"var(--cloud)":"var(--muted)")},[label]);
+    if(!on) b.addEventListener("click",()=>go(step));
+    wrap.appendChild(b);
+  });
+  return wrap;
+}
+
+/* ===================== SCREENS ===================== */
+function screenIntro(){
+  const helix='<svg width="100%" height="120" viewBox="0 0 320 120"><defs><linearGradient id="hg" x1="0" x2="1"><stop offset="0%" stop-color="#2e9bf0"/><stop offset="100%" stop-color="#3fe0c7"/></linearGradient></defs>'+
+    (function(){ let s=""; const rows=11; for(let i=0;i<rows;i++){ const x=20+(i/(rows-1))*280; const ph=(i/(rows-1))*Math.PI*2.2; const y1=60+Math.sin(ph)*34; const y2=60-Math.sin(ph)*34; const op=(0.35+0.65*Math.abs(Math.cos(ph))).toFixed(2); s+='<line x1="'+x+'" y1="'+y1+'" x2="'+x+'" y2="'+y2+'" stroke="url(#hg)" stroke-width="2" opacity="'+(op*0.5)+'"/><circle cx="'+x+'" cy="'+y1+'" r="4.5" fill="#3fe0c7" opacity="'+op+'"/><circle cx="'+x+'" cy="'+y2+'" r="4.5" fill="#2e9bf0" opacity="'+op+'"/>'; } return s; })()+'</svg>';
+  const benefit=(emoji,txt,last)=>h("div",{style:"display:flex;align-items:center;gap:11px;padding:9px 0"+(last?"":";border-bottom:1px solid rgba(255,255,255,.06)")},[
+    h("span",{style:"font-size:18px;width:22px;text-align:center;flex:none"},[emoji]),
+    h("span",{style:"font-size:13.5px;color:#cdd9ee;line-height:1.35"},[txt])
+  ]);
+  return h("div",{class:"screen"},[
+    h("div",{class:"brand",style:"margin-bottom:22px"},[ h("div",{class:"logo",style:"font-size:17px",html:'MEINE <b>FINANZ</b><i>CLOUD</i>'}) ]),
+    state.partner ? h("div",{style:"margin:-10px 0 18px;text-align:center;font-size:12.5px;color:var(--muted)"},[
+      "Persönlich begleitet von ", h("b",{style:"color:#eaf1fb"},[state.partner.name||""]),
+      h("div",{style:"font-size:11.5px;color:#5d6f91;margin-top:2px"},[ (state.partner.tel||"")+(state.partner.email?((state.partner.tel?" · ":"")+state.partner.email):"") ])
+    ]) : h("span"),
+    h("div",{html:helix}),
+    ablaufStrip(),
+    h("div",{class:"eyebrow",style:"margin-top:24px"},["Dein Papierkram? Erledigt sich."]),
+    h("h1",{style:"font-size:34px"},["Alle Unterlagen an einem Ort."]),
+    h("p",{class:"lead"},["Einfach abfotografieren – die KI in deiner FinanzCloud liest alles aus, sortiert deine Verträge und behält für dich den Überblick. Kein Ordner-Chaos, keine Zettelwirtschaft. Alles digital, alles griffbereit."]),
+    h("div",{class:"card",style:"margin-top:4px"},[
+      benefit("📄","Verträge einfach abfotografiert – die KI ordnet den Rest"),
+      benefit("🧠","Ein digitaler Überblick, der immer aktuell ist"),
+      benefit("🔍","Sparpotenzial und doppelte Kosten fallen sofort auf"),
+      benefit("🎁","100 € Startguthaben zum Loslegen",true)
+    ]),
+    h("div",{style:"margin-top:14px;background:rgba(246,180,60,.1);border:1px solid rgba(246,180,60,.28);border-radius:14px;padding:15px"},[
+      h("div",{style:"font-family:Space Grotesk;font-weight:700;font-size:15px;color:var(--gold);margin-bottom:5px"},["💸 Und danach: aus Steuern echtes Vermögen"]),
+      h("p",{style:"font-size:12.5px;color:#cdd9ee;line-height:1.5;margin:0"},["Wenn alles digital an einem Ort liegt, sieht man schwarz auf weiß, wie viel Sparpotenzial in den Verträgen steckt – und wie sich ungenutzte Steuervorteile Jahr für Jahr in echtes Vermögen verwandeln lassen. Die meisten staunen, was da zusammenkommt."])
+    ]),
+    h("div",{class:"eyebrow",style:"margin-top:24px"},["In zwei einfachen Schritten"]),
+    h("div",{class:"card",style:"margin-top:4px"},[
+      h("div",{style:"display:flex;gap:11px;align-items:flex-start;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.06)"},[
+        h("span",{style:"font-family:Space Grotesk;font-weight:700;color:var(--cloud);font-size:15px;flex:none;width:26px"},["1."]),
+        h("div",null,[ h("div",{style:"font-size:14px;font-weight:600;color:#eaf1fb"},["FinanzCloud einrichten"]), h("div",{style:"font-size:12.5px;color:#9fb3d6;margin-top:2px"},["Unterlagen digitalisieren – die KI übernimmt Ordnung und Überblick."]) ])
+      ]),
+      h("div",{style:"display:flex;gap:11px;align-items:flex-start;padding:9px 0"},[
+        h("span",{style:"font-family:Space Grotesk;font-weight:700;color:var(--gold);font-size:15px;flex:none;width:26px"},["2."]),
+        h("div",null,[ h("div",{style:"font-size:14px;font-weight:600;color:#eaf1fb"},["Deine FinanzDNA"]), h("div",{style:"font-size:12.5px;color:#9fb3d6;margin-top:2px"},["Die persönliche Auswertung: wo du bei Rente, Eigentum, Vermögen, Familie & Absicherung stehst."]) ])
+      ])
+    ]),
+    h("button",{class:"btn",style:"margin-top:18px",onClick:next},["Jetzt FinanzCloud einrichten"]),
+    h("p",{class:"foot"},["Schritt 2 später ganz easy – grobe Angaben per Regler, kein exaktes Einkommen, keine Steuer-ID."]),
+    h("button",{class:"back",style:"margin-top:6px;font-size:12px;opacity:.55",onClick:()=>go("partner")},["Partner werden →"]),
+    loadControl({mt:18})
+  ]);
+}
+
+function partnerChart(monthly){
+  const n=12, gap=5, W=300, H=120, baseY=H-18, bw=(W-(n-1)*gap)/n;
+  const maxFrac=1;
+  let s='';
+  for(let m=1;m<=n;m++){
+    const frac=m/n, bh=Math.max(3,(H-30)*frac/maxFrac), x=(m-1)*(bw+gap), y=baseY-bh;
+    const last=m===n;
+    s+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+bh.toFixed(1)+'" rx="2" fill="'+(last?"var(--gold)":"url(#pg)")+'"/>';
+  }
+  [1,6,12].forEach(m=>{ const x=(m-1)*(bw+gap)+bw/2; s+='<text x="'+x.toFixed(1)+'" y="'+(H-4)+'" text-anchor="middle" fill="#9fb3d6" style="font-family:Inter;font-size:9px">M'+m+'</text>'; });
+  return '<svg width="100%" viewBox="0 0 '+W+' '+H+'"><defs><linearGradient id="pg" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#2e9bf0"/><stop offset="1" stop-color="#3fe0c7"/></linearGradient></defs>'+s+'</svg>';
+}
+
+function screenPartner(){
+  const monthlyEl=h("div",{class:"num",style:"font-family:Space Grotesk;font-weight:700;font-size:34px;color:var(--gold)"});
+  const activeEl=h("span",{class:"ra"});
+  const passiveEl=h("span",{class:"ra"});
+  const yearEl=h("span",{style:"font-family:Space Grotesk;font-weight:700;font-size:22px;color:var(--pulse)"});
+  const ampelEl=h("div",{style:"font-size:12.5px;font-weight:600;margin-top:10px"});
+  const chartEl=h("div",{style:"margin-top:6px"});
+
+  const update=()=>{
+    const aktiv=state.pKunden>=1;
+    const aktivEink=state.pKunden*400;
+    const l1=state.pPartner1*state.pProdPartner*400;
+    const l2=state.pPartner2*state.pProdPartner*400;
+    const passive=aktiv?Math.round(l1*0.20+l2*0.02):0;
+    const monthly=aktivEink+passive;
+    monthlyEl.textContent=eur(monthly);
+    activeEl.textContent=eur(aktivEink);
+    passiveEl.innerHTML=aktiv?eur(passive):'<span style="color:#6b7c9e">ruht</span>';
+    yearEl.textContent="~"+eur(monthly*12);
+    ampelEl.innerHTML=aktiv
+      ? '<span style="color:var(--pulse)">● Aktivstatus erfüllt – deine passive Beteiligung läuft.</span>'
+      : '<span style="color:var(--gold)">● Aktivstatus offen – mind. 1 Abschluss/Monat (3/Quartal) schaltet die passive Beteiligung frei.</span>';
+    chartEl.innerHTML=partnerChart(monthly);
+  };
+
+  const ergebnis=h("div",{class:"card",style:"text-align:center"},[
+    monthlyEl,
+    h("div",{style:"color:var(--muted);font-size:13px;margin-bottom:10px"},["Mögliches Einkommen pro Monat"]),
+    h("div",{class:"row"},[ h("span",{class:"rl",style:"color:var(--muted)"},["Dein aktives Einkommen (Abschlüsse × 400 €)"]), activeEl ]),
+    h("div",{class:"row"},[ h("span",{class:"rl",style:"color:var(--muted)"},["Deine passive Beteiligung (20 % / 2 %)"]), passiveEl ]),
+    ampelEl
+  ]);
+
+  const verlauf=h("div",{class:"card"},[
+    h("div",{class:"rh"},["So entwickelt es sich über 12 Monate"]),
+    chartEl,
+    h("div",{style:"display:flex;justify-content:space-between;align-items:center;margin-top:8px"},[
+      h("span",{style:"font-size:13px;color:var(--muted)"},["Nach 12 Monaten"]), yearEl
+    ])
+  ]);
+
+  const regler=h("div",{class:"card"});
+  regler.appendChild(h("div",{class:"rh"},["Spiel dein Potenzial durch"]));
+  regler.appendChild(slider("Eigene Abschlüsse / Monat","pKunden",0,8,1,v=>v+" × 400 €",update));
+  regler.appendChild(slider("Direkte Partner","pPartner1",0,15,1,v=>v+(v===1?" Partner":" Partner"),update));
+  regler.appendChild(slider("Partner deiner Partner","pPartner2",0,40,1,v=>v+"",update));
+  regler.appendChild(slider("Abschlüsse je Partner / Monat","pProdPartner",0,5,1,v=>v+"",update));
+
+  update();
+
+  return h("div",{class:"screen"},[
+    h("div",{class:"eyebrow"},["FinanzCloud-Partner"]),
+    h("h2",{style:"font-size:26px"},["Dein Verdienst-Potenzial"]),
+    h("p",{class:"lead"},["Du hilfst Menschen, ihre Finanzen in der Cloud zu erfassen, und platzierst bis zu zwei zulassungsfreie Premiumprodukte – Edelmetall-Sparplan und (nach Schulung) Vermögensverwaltung. Pro vollständigem Datensatz mit platziertem Produkt: 400 €."]),
+    ergebnis,
+    verlauf,
+    regler,
+    h("div",{class:"card",style:"border-color:rgba(63,224,199,.3)"},[
+      h("div",{style:"font-family:Space Grotesk;font-weight:700;font-size:14px;color:var(--pulse);margin-bottom:4px"},["Alle gleichgestellt – nur Umsatz zählt"]),
+      h("p",{style:"font-size:12.5px;color:#cdd9ee;line-height:1.45;margin:0"},["Kein Karrieresystem, keine Stufen. Du verdienst an deinen eigenen Abschlüssen und passiv an der echten Produktion deiner geworbenen Partner (20 %) und deren Partner (2 %) – nie fürs bloße Anwerben. Die passive Beteiligung setzt deinen eigenen Aktivstatus voraus. Dein Auto refinanziert sich bereits ab einem eigenen Abschluss im Monat (ab ~"+eur(minAutoRate())+"/Mon.)."])
+    ]),
+    h("button",{class:"btn gold",style:"margin-top:6px",onClick:()=>toast("Im echten System: Partner-Anfrage an euer CRM")},["Partner werden"]),
+    h("p",{class:"foot"},["Beispielrechnung, keine Verdienstgarantie. Tatsächliche Einnahmen hängen von echten Abschlüssen ab; Stornohaftung und Aktivstatus gelten. Erfassung & Abrechnung laufen später über euer CRM."]),
+    h("button",{class:"back",onClick:()=>go("intro")},["Zurück"])
+  ]);
+}
+
+function screenTyp(){
+  const card=h("div",{class:"card"});
+  [["rente","Altersvorsorge / Rente"],["eigentum","Eigentum / Immobilie"],["vermoegen","Vermögen / Geldanlage"],
+   ["familie","Familie & Kinder"],["absicherung","Absicherung"],["steuern","Steuern & staatliche Subventionen"]]
+   .forEach(([k,l])=>card.appendChild(prioSlider(l,k)));
+  return h("div",{class:"screen"},[
+    h("div",{class:"eyebrow"},["Schritt 1 · Was treibt dich an?"]),
+    h("h2",{style:"font-size:26px"},["Was ist dir wichtig?"]),
+    h("p",{class:"lead"},["Wie wichtig sind dir diese sechs Bereiche? Schieb nach Gefühl – am Ende vergleichen wir deine Prioritäten mit deinem tatsächlichen Stand."]),
+    card,
+    h("div",{class:"btnrow"},[ h("button",{class:"btn ghost",style:"flex:.5",onClick:prev},["Zurück"]), h("button",{class:"btn",onClick:next},["Weiter"]) ])
+  ]);
+}
+
+function screenBasis(){
+  const card=h("div",{class:"card"});
+  // Haushalt zuerst, damit die Partner-Felder dazu passen
+  card.appendChild(h("div",{class:"field"},[ h("div",{class:"lab"},[h("span",null,["Haushalt"])]),
+    choices("haushalt",[{v:"allein",l:"Ich allein"},{v:"paar",l:"Wir zu zweit"}],true,()=>renderScreenKeepStep()) ]));
+  // Alter
+  card.appendChild(slider("Dein Alter","alter",18,66,1,v=>v+" Jahre"));
+  if(state.haushalt==="paar"){
+    card.appendChild(slider("Alter Partner:in","alterPartner",18,66,1,v=>v+" Jahre"));
+  }
+  // Kinder
+  card.appendChild(slider("Kinder im Haushalt","kinder",0,4,1,v=>v===0?"keine":v));
+  // Einkommen
+  if(state.haushalt==="paar"){
+    const readout=h("div",{style:"text-align:center;font-family:Space Grotesk;font-weight:600;color:var(--pulse);font-size:14px;margin:2px 0 6px"});
+    const upd=()=>{ readout.textContent="Haushalt netto: ~"+eur(Number(state.nettoSelf)+Number(state.nettoPartner))+" / Monat"; };
+    card.appendChild(slider("Dein Beitrag (netto/Monat)","nettoSelf",0,6000,100,v=>"~"+eur(v),upd));
+    card.appendChild(slider("Beitrag Partner:in (netto/Monat)","nettoPartner",0,6000,100,v=>"~"+eur(v),upd));
+    upd();
+    card.appendChild(readout);
+  } else {
+    card.appendChild(slider("Netto pro Monat (ca.)","netto",1000,8000,100,v=>"~"+eur(v)));
+  }
+  card.appendChild(h("div",{class:"field"},[ h("div",{class:"lab"},[h("span",null,["Selbstständig nebenbei tätig?"])]),
+    choices("selbststaendig",[{v:"nein",l:"Nein"},{v:"nebenbei",l:"Ja, nebenbei"},{v:"haupt",l:"Ja, hauptberuflich"}],false) ]));
+  card.appendChild(h("div",{class:"field"},[ h("div",{class:"lab"},[h("span",null,["Wo wohnst du …"])]),
+    choices("wohnstatus",[{v:"miete",l:"zur Miete"},{v:"eigentum_kredit",l:"im Eigentum (mit Kredit)"},{v:"eigentum_frei",l:"im Eigentum (abbezahlt)"}],false,()=>renderScreenKeepStep()) ]));
+  if(state.wohnstatus==="miete") card.appendChild(slider("Miete pro Monat","miete",0,2500,50,v=>eur(v)));
+  else if(state.wohnstatus==="eigentum_kredit") card.appendChild(slider("Kreditrate pro Monat","miete",0,2500,50,v=>eur(v)));
+  return h("div",{class:"screen"},[
+    h("div",{class:"eyebrow"},["Schritt 2 · Ein grobes Bild"]),
+    h("h2",{style:"font-size:26px"},["Ein paar Eckdaten"]),
+    h("p",{class:"lead"},["Alles ungefähr – per Regler. Niemand fragt nach dem Cent."]),
+    card,
+    state.beratungUnlocked ? ratenkreditCard() : h("span"),
+    h("div",{class:"btnrow"},[ h("button",{class:"btn ghost",style:"flex:.5",onClick:prev},["Zurück"]), h("button",{class:"btn",onClick:next},["Los geht's"]) ])
+  ]);
+}
+
+function levelShell(level,emoji,title,sub,fields,resultFn){
+  const n=LEVELS.indexOf(level)+1;
+  if(!state.levelOpen) state.levelOpen={};
+  const res=h("div",{class:"res"});
+  const lineEl=h("span",{style:"font-size:13.5px"});
+  const chev=h("span",{style:"color:var(--cloud);font-weight:700;font-size:16px;margin-left:10px"});
+  const toggle=h("div",{class:"card",style:"cursor:pointer;display:flex;justify-content:space-between;align-items:center"},[ lineEl, chev ]);
+  const setOpen=o=>{ state.levelOpen[level]=o; res.style.display=o?"block":"none"; chev.textContent=o?"▾":"▸"; };
+  const refreshRes=()=>{
+    const cc=calc();
+    const p=bereichPotenzial(level,cc);
+    res.innerHTML=(p?('<div class="rh">Heute vs. möglich</div>'+potenzialSVG(p)+'<div style="height:14px"></div>'):'')+resultFn(cc);
+    const cov=cc.cov?cc.cov[level]:null;
+    const tail=state.beratungUnlocked?' <span style="color:var(--muted)">– tippen für Details</span>':'';
+    lineEl.innerHTML=(cov!=null)
+      ? '<b style="font-family:Space Grotesk">Dein Stand: ~'+Math.round(cov)+' %</b>'+tail
+      : '<b style="font-family:Space Grotesk">Dein Ergebnis</b>'+tail;
+  };
+  const card=h("div",{class:"card"});
+  fields(card, refreshRes);
+  refreshRes();
+  toggle.addEventListener("click",()=>{
+    if(!state.beratungUnlocked) return;
+    setOpen(!state.levelOpen[level]);
+  });
+  if(!state.beratungUnlocked){ res.style.display="none"; chev.textContent=""; toggle.style.cursor="default"; }
+  else setOpen(!!state.levelOpen[level]);
+  const pts=h("div",{class:"ptsgain"});
+  const updatePts=()=>{ pts.textContent="+ "+calc().scores[level]+" Punkte für "+LABELS[level]; };
+  updatePts();
+  // Punkte zusätzlich bei jeder Eingabe aktualisieren
+  card.addEventListener("input",updatePts);
+  card.addEventListener("click",updatePts);
+  return h("div",{class:"screen"},[
+    h("div",{class:"eyebrow"},["Level "+n+" von 5"]),
+    h("h2",{style:"font-size:26px"},[emoji+" "+title]),
+    h("p",{class:"lead"},[sub]),
+    card, toggle, res, pts,
+    (state.beratungUnlocked && level==="eigentum") ? baufiCard(calc()) : h("span"),
+    h("div",{class:"btnrow"},[ h("button",{class:"btn ghost",style:"flex:.5",onClick:prev},["Zurück"]), h("button",{class:"btn",onClick:next},["Weiter"]) ])
+  ]);
+}
+
+function potenzialSVG(p){
+  const covPct=clamp(p.covPct,0,100), gapPct=100-covPct;
+  const W=320, barY=30, barH=26, r=8;
+  const covW=W*covPct/100, gapW=W-covW;
+  let s="";
+  s+='<text x="2" y="16" fill="#3fe0c7" style="font-family:Space Grotesk;font-weight:600;font-size:10px;letter-spacing:.06em">'+p.left+'</text>';
+  s+='<text x="'+(W-2)+'" y="16" text-anchor="end" fill="#f6b43c" style="font-family:Space Grotesk;font-weight:600;font-size:10px;letter-spacing:.06em">'+p.right+'</text>';
+  s+='<rect x="0" y="'+barY+'" width="'+W+'" height="'+barH+'" rx="'+r+'" fill="rgba(246,180,60,.20)"/>';
+  if(covW>0) s+='<rect x="0" y="'+barY+'" width="'+covW.toFixed(1)+'" height="'+barH+'" rx="'+r+'" fill="url(#rcov)"/>';
+  if(covPct>=14) s+='<text x="'+(covW/2).toFixed(0)+'" y="'+(barY+barH/2+4)+'" text-anchor="middle" fill="#06122c" style="font-family:Space Grotesk;font-weight:700;font-size:13px">'+Math.round(covPct)+' %</text>';
+  if(gapPct>=14) s+='<text x="'+(covW+gapW/2).toFixed(0)+'" y="'+(barY+barH/2+4)+'" text-anchor="middle" fill="#f6b43c" style="font-family:Space Grotesk;font-weight:700;font-size:13px">'+Math.round(gapPct)+' %</text>';
+  s+='<text x="0" y="'+(barY+barH+20)+'" fill="#9fb3d6" style="font-family:Inter;font-size:10.5px">'+p.line+'</text>';
+  return '<svg width="100%" viewBox="0 0 '+W+' '+(barY+barH+30)+'" style="margin-top:4px">'+
+    '<defs><linearGradient id="rcov" x1="0" x2="1"><stop offset="0" stop-color="#2e9bf0"/><stop offset="1" stop-color="#3fe0c7"/></linearGradient></defs>'+s+'</svg>';
+}
+// IST gegen SOLL/Potenzial je Bereich (Coverage kommt aus calc -> ehrlich, nur Ist-Bestand)
+function bereichPotenzial(level,c){
+  if(level==="familie" && state.kinder===0) return null;
+  const cov=c.cov?c.cov[level]:null;
+  if(cov==null) return null;
+  if(level==="rente"){
+    return { covPct:cov, left:"AUF KURS", right:"NOCH NÖTIG",
+      line:"Nötiges Kapital ~"+eurK(c.renteKapital)+" · auf Kurs ~"+eurK(c.kapitalZukunft)+" · Lücke ~"+eur(c.renteLuecke)+"/Mon." };
+  }
+  if(level==="eigentum"){
+    if(state.wohnstatus==="eigentum_frei")
+      return { covPct:cov, left:"ERFÜLLT", right:"KAPITALANLAGE", line:"Eigenheim abbezahlt – Eigentum erfüllt. Nächster Schritt: Kapitalanlage." };
+    if(state.wohnstatus==="eigentum_kredit")
+      return { covPct:cov, left:"IM AUFBAU", right:"KAPITALANLAGE", line:"Du baust bereits Eigentum auf · zusätzlich möglich: Immobilie ~"+eurK(c.immoRahmen) };
+    const neededEK=Math.max(1,(c.ekQuote||0.15)*c.immoRahmen);
+    return { covPct:cov, left:"STARTBEREIT", right:"NOCH NÖTIG",
+      line:"EK ~"+eur(state.eigenkapital)+" · empfohlen ~"+eurK(neededEK)+" ("+Math.round((c.ekQuote||0.15)*100)+" %) · Objekt ~"+eurK(c.immoRahmen) };
+  }
+  if(level==="vermoegen"){
+    return { covPct:cov, left:"HEUTE", right:"AUFBAU",
+      line:"Vermögen heute ~"+eurK(state.vermoegen)+" · Richtwert ~"+eurK(c.netto*12)+" (1 Jahreseinkommen)" };
+  }
+  if(level==="familie"){
+    return { covPct:cov, left:"AUF KURS", right:"ES FEHLT",
+      line:"Auf Kurs ~"+eurK(c.familieReached)+" · Ziel ~"+eurK(state.zielKapital) };
+  }
+  if(level==="absicherung"){
+    return { covPct:cov, left:"HEUTE GESCHÜTZT", right:"UNGESCHÜTZT",
+      line:"Arbeitskraft ~"+eurK(c.arbeitskraft)+" · Rücklagen ~"+c.ruecklagenMonate.toFixed(1)+" Mon." };
+  }
+  return null;
+}
+function screenRente(){
+  return levelShell("rente","🏖️","Rente auf Nettolohn-Niveau","Willst du im Ruhestand deinen heutigen Lebensstandard halten?",
+    (card,refresh)=>{
+      card.appendChild(slider("Zielniveau vom heutigen Netto","zielNiveau",50,100,5,v=>v+" %",refresh));
+      card.appendChild(slider("Erwartete gesetzliche Rente","erwProzent",20,70,1,v=>v+" % vom Netto",refresh));
+      card.appendChild(slider("Monatlicher Sparbeitrag (aktuell)","vorhandeneRente",0,1500,50,v=>eur(v)+"/Mon.",refresh));
+      card.appendChild(slider("Bereits vorhandenes Kapital","vorhandenKapital",0,200000,2500,v=>v>=200000?"200 Tsd. €+":eurK(v),refresh));
+    },
+    c=>{
+      const paar=state.haushalt==="paar";
+      let s='<div class="rh">Deine Rente, grob gerechnet</div>';
+      s+=statRow(paar?"Jahre bis zur Rente (du / Partner:in)":"Jahre bis zur Rente",
+        '<span class="num">'+c.jahreBisRente+(paar?" / "+c.jahreBisRenteB:"")+'</span>');
+      s+=statRow("Wunsch-Rente pro Monat"+(paar?" (Haushalt)":""),'<span class="num">'+eur(c.zielRente)+'</span>');
+      if(paar) s+=statRow("Rentenlücke du / Partner:in",'<span class="num">'+eur(c.lueckeA)+' / '+eur(c.lueckeB)+'</span>',true);
+      s+=statRow(paar?"Rentenlücke Haushalt (monatlich)":"Voraussichtliche Rentenlücke",
+        '<span class="num">'+eur(c.renteLuecke)+'/Mon.</span>',c.renteLuecke>0);
+      s+=statRow("Grob nötiges Kapital bis Rente",'<span class="num">'+eurK(c.renteKapital)+'</span>');
+      if(Number(state.vorhandenKapital)>0||Number(state.vorhandeneRente)>0) s+=statRow("Dein Kapital bis dahin (~"+Math.round(RENTE_ZINS*100)+" %)",'<span class="num">'+eurK(c.kapitalZukunft)+'</span>');
+      s+=statRow("Noch zu schließen",'<span class="num">'+eurK(c.renteRest)+'</span>',c.renteRest>0);
+      if(c.renteRest>0) s+=statRow("Zusätzlich nötiger Sparbeitrag (~"+Math.round(RENTE_ZINS*100)+" %)",'<span class="num">'+eur(c.noetigerSparbeitrag)+'/Mon.</span>',true);
+      s+=statRow("Mögl. Steuervorteil p.a. nach § 10 EStG",'<span class="num">~'+eur(c.basisSteuer)+'</span>');
+      s+='<p class="assume">Grobe Schätzung. Annahme: ~'+PAYOUT_YEARS+' Jahre Rentenbezug, gleiche Annahmen je Person, vorhandenes Kapital und Sparbeitrag mit ~'+Math.round(RENTE_ZINS*100)+' % gerechnet. Steuervorteil: ~10 % des Nettoeinkommens als geförderter Altersvorsorge-Beitrag nach § 10 EStG (~'+eur(c.basisBeitrag)+'/Mon.; betrieblich auch § 3 Nr. 63 EStG), je Person mit eigenem Grenzsteuersatz. Keine Beratung.</p>';
+      return s;
+    }
+  );
+}
+
+function screenEigentum(){
+  const kap=(state.wohnstatus!=="miete")||(state.wunsch==="kapitalanlage");
+  const title=kap?"Immobilie als Kapitalanlage":"Eigentum statt Miete";
+  const sub=kap?"Was bringt eine vermietete Wohnung – Miete und Steuer inklusive?":"Was wäre möglich, wenn aus Miete Eigentum würde?";
+  return levelShell("eigentum","🏡",title,sub,
+    (card,refresh)=>{
+      card.appendChild(h("div",{class:"field"},[ h("div",{class:"lab"},[h("span",null,["Dein Ziel"])]),
+        choices("wunsch",[{v:"eigennutzung",l:"Selbst darin wohnen"},{v:"kapitalanlage",l:"Vermieten als Kapitalanlage"},{v:"unsicher",l:"Bin noch unsicher"}],false,()=>renderScreenKeepStep()) ]));
+      if(state.wunsch!=="unsicher"){
+        card.appendChild(slider("Zusätzlich pro Monat möglich","zusatzBudget",0,800,25,v=>eur(v),refresh));
+        card.appendChild(slider("Eigenkapital","eigenkapital",0,150000,2500,v=>eurK(v),refresh));
+      }
+    },
+    c=>{
+      const k=c.kapitalMode;
+      if(k){
+        const mieteJ=0.045*c.immoRahmen, afa=0.025*0.80*c.immoRahmen, steuer=afa*c.grenzSteuer;
+        let s='<div class="rh">Deine Kapitalanlage, grob gerechnet</div>';
+        s+=statRow("Dein Eigenanteil pro Monat",'<span class="num">'+eur(state.zusatzBudget)+'</span>');
+        s+=statRow("Mieteinnahme (4,5 % Mietrendite)",'<span class="num">'+eur(mieteJ)+'/Jahr</span>');
+        s+=statRow("Möglicher Darlehensrahmen",'<span class="num">'+eurK(c.darlehen)+'</span>');
+        s+=statRow("Objektwert inkl. Eigenkapital",'<span class="num">'+eurK(c.immoRahmen)+'</span>');
+        s+='<div style="height:8px"></div>';
+        s+=statRow("Abschreibung (2,5 % auf 80 %)",'<span class="num">'+eur(afa)+'/Jahr</span>');
+        s+=statRow("Geschätzte Steuerersparnis",'<span class="num">~'+eur(steuer)+'/Jahr</span>');
+        s+='<p class="assume">Tragfähigkeit: 80 % der Miete plus dein Eigenanteil bedienen die Finanzierung (~4,5 % Annuität) – deine persönliche Miete zählt nicht mit. Steuer geschätzt über 2,5 % Abschreibung auf 80 % (Gebäudeanteil) bei ~'+Math.round(c.grenzSteuer*100)+' % Grenzsteuersatz. Vereinfacht, keine Steuerberatung – die echte Tragfähigkeit prüfen wir im Termin.</p>';
+        return s;
+      }
+      let s='<div class="rh">Dein Eigentums-Rahmen, grob</div>';
+      s+=statRow("Aus "+eur(state.miete)+" Miete + "+eur(state.zusatzBudget)+" extra",'<span class="num">'+eur(c.rate)+'/Mon.</span>');
+      s+=statRow("Möglicher Darlehensrahmen",'<span class="num">'+eurK(c.darlehen)+'</span>');
+      s+=statRow("Grober Immobilienrahmen inkl. EK",'<span class="num">'+eurK(c.immoRahmen)+'</span>');
+      s+='<p class="assume">Grobe Schätzung bei ~4,5 % Annuität (Zins + Tilgung). Tatsächliche Konditionen weichen ab.</p>';
+      return s;
+    }
+  );
+}
+
+function screenVermoegen(){
+  return levelShell("vermoegen","📈","Vermögen & Geldanlage","Was bringt dein Geld heute – und was wäre möglich?",
+    (card,refresh)=>{
+      card.appendChild(h("div",{class:"field"},[ h("div",{class:"lab"},[h("span",null,["Wo liegt dein Geld aktuell vor allem?"])]),
+        choices("anlageTyp",[{v:"lv",l:"Lebens-/Rentenversicherung"},{v:"bank",l:"Bank-/Bausparen"},{v:"fonds",l:"Fonds / ETF"},{v:"gold",l:"Edelmetall / Goldsparplan"},{v:"keine",l:"Noch nichts"}],false,()=>renderScreenKeepStep()) ]));
+      if(state.anlageTyp!=="keine"){
+        card.appendChild(slider("Monatlicher Beitrag","anlageBeitrag",0,500,10,v=>eur(v),refresh));
+        card.appendChild(slider("Heutiger Wert deiner Geldanlage","anlageBestand",0,200000,2500,v=>v>=200000?"200 Tsd. €+":eurK(v),refresh));
+        card.appendChild(slider("Laufzeit gesamt","anlageJahre",5,40,1,v=>v+" Jahre",refresh));
+        card.appendChild(slider("Voraussichtliche Auszahlung","anlageAblauf",0,250000,5000,v=>eurK(v),refresh));
+      }
+    },
+    c=>{
+      if(state.anlageTyp==="keine")
+        return '<div class="rh">Kein Altvertrag?</div><p class="assume" style="margin-top:4px">Dann startest du ohne Altlasten – und gleich richtig. Im Termin zeigen wir dir den passenden Einstieg.</p>';
+      const b=Number(state.anlageBeitrag), j=Number(state.anlageJahre), a=Number(state.anlageAblauf), best=Number(state.anlageBestand||0);
+      const eingezahlt=best + b*12*j, r=impliedReturn(b,j,a,best), potWert=Math.round(best*Math.pow(1.06,j)+fvAnnuity(b,6,j)), diff=Math.max(0,potWert-a);
+      const rTxt=r==null?"–":((r<0?"−":"")+Math.abs(r).toFixed(1).replace(".",",")+" %");
+      const p={ covPct:clamp(a/Math.max(1,potWert)*100,0,100), left:"IHRE ANLAGE", right:"MÖGLICH",
+        line:"Deine Rendite ~"+rTxt+" · möglich ~6 % · Unterschied ~"+eurK(diff) };
+      let s='<div class="rh">Deine aktuelle Anlage – ehrlich gerechnet</div>';
+      s+=potenzialSVG(p)+'<div style="height:12px"></div>';
+      s+=statRow("Eingesetzt gesamt (Guthaben + Beiträge)",'<span class="num">'+eurK(eingezahlt)+'</span>');
+      if(best>0) s+=statRow("davon heutiges Guthaben",'<span class="num">'+eurK(best)+'</span>');
+      s+=statRow("Voraussichtliche Auszahlung",'<span class="num">'+eurK(a)+'</span>');
+      s+=statRow("Deine tatsächliche Rendite",'<span class="num">'+rTxt+' p.a.</span>', r!=null&&r<3);
+      s+=statRow("Mit ~6 % wären es",'<span class="num">'+eurK(potWert)+'</span>');
+      s+=statRow("Verschenktes Potenzial",'<span class="num">~'+eurK(diff)+'</span>', diff>0);
+      s+='<p class="assume">Vereinfachte Beispielrechnung, keine Beratung. 6 % ist ein langfristiger Beispielwert für eine breit gestreute Anlage, keine Zusage. Heutiges Guthaben und Beiträge sind in Rendite und Hochrechnung berücksichtigt. Bestehende Verträge prüfen wir individuell – nichts wird vorschnell gekündigt.</p>';
+      return s;
+    }
+  );
+}
+
+/* ===== Beratungstool: Rechner (nur bei beratungUnlocked) ===== */
+const RK_FAKTOR = 18;
+const RK_MAX = 100000;                 // max. Ratenkredit = 20 × Monats-Haushaltsnetto
+const HH_PAUSCHALE_1 = 850, HH_PAUSCHALE_2 = 1250;  // Lebenshaltung pauschal
+const BAUFI_EIGEN  = { zins:1.5, tilg:1.5 };
+const BAUFI_STEUER = { zins:4.5, tilg:1.0 };
+const SANIERUNG = { zins:6, jahre:20, max:100000 };
+const VERMIET_ANSATZ = 0.80;          // 80 % der Mieteinnahme als Einnahme
+const RENDITEN = { basis:2.5, etf:6, tagesgeld:1, gold:4, immo:4.5 };
+function nf(x){ return (Math.round(x*10)/10).toString().replace(".",","); }
+function annuitaetRate(darlehen,zinsPct,jahre){ const r=zinsPct/100/12, n=jahre*12; return r===0?darlehen/n:darlehen*(r*Math.pow(1+r,n))/(Math.pow(1+r,n)-1); }
+
+function ratenkreditCard(){
+  const c=calc();
+  if(!state.ratenkredite) state.ratenkredite=[];
+  const open=!!state.rkOpen;
+  const card=h("div",{class:"card",style:"border:1px solid rgba(46,155,240,.3)"});
+  const tRateH=state.ratenkredite.reduce((s,r)=>s+Number(r.rate||0),0);
+  const summary = state.ratenkredite.length ? (state.ratenkredite.length+" erfasst · "+eur(tRateH)+"/Mon.") : "tippen zum Erfassen";
+  const head=h("div",{style:"display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer"},[
+    h("div",null,[
+      h("div",{class:"eyebrow",style:"color:var(--cloud);margin:0"},["Beratungstool · Ratenkredite"]),
+      h("div",{style:"font-size:12px;color:var(--muted);margin-top:2px"},[summary])
+    ]),
+    h("span",{style:"color:var(--muted);font-size:12px;flex:0 0 auto"},[open?"▲":"▼"])
+  ]);
+  head.addEventListener("click",()=>{ state.rkOpen=!open; renderScreenKeepStep(); });
+  card.appendChild(head);
+  if(!open) return card;
+  card.appendChild(h("p",{style:"font-size:12.5px;color:var(--muted);margin:11px 0 10px"},["Bestehende Ratenkredite erfassen – Summen und mögliches Volumen werden berechnet."]));
+  if(state.ratenkredite.length){
+    const list=h("div",{style:"display:flex;flex-direction:column;gap:7px;margin-bottom:10px"});
+    state.ratenkredite.forEach((rk,i)=>{
+      const rm=h("button",{class:"mini",style:"padding:2px 9px;flex:none"},["✕"]);
+      rm.addEventListener("click",()=>{ state.ratenkredite.splice(i,1); renderScreenKeepStep(); });
+      list.appendChild(h("div",{style:"display:flex;justify-content:space-between;align-items:center;gap:8px;background:rgba(255,255,255,.04);border-radius:10px;padding:8px 11px"},[
+        h("div",null,[ h("div",{style:"font-size:13px;color:#eaf1fb;font-weight:600"},[rk.name||"Kredit "+(i+1)]), h("div",{style:"font-size:11.5px;color:var(--muted);margin-top:1px"},[eur(rk.rate)+"/Mon. · Rest "+eur(rk.rest)]) ]),
+        rm
+      ]));
+    });
+    card.appendChild(list);
+    const tRate=state.ratenkredite.reduce((s,r)=>s+Number(r.rate||0),0);
+    const tRest=state.ratenkredite.reduce((s,r)=>s+Number(r.rest||0),0);
+    const sumBox=h("div");
+    sumBox.innerHTML='<div class="rh">Summen</div>'+statRow("Monatsrate gesamt",'<span class="num">'+eur(tRate)+'/Mon.</span>')+statRow("Restschuld gesamt (Finanzierungshöhe)",'<span class="num">'+eur(tRest)+'</span>');
+    card.appendChild(sumBox);
+  }
+  const mk=(ph,type)=>h("input",{type:type||"text",placeholder:ph,style:"width:100%;box-sizing:border-box;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.16);border-radius:10px;padding:9px 11px;color:#eaf1fb;font-size:13px;margin-bottom:8px"});
+  const nIn=mk("Bezeichnung (z. B. Autokredit)"), rIn=mk("Monatsrate (€)","number"), sIn=mk("Restschuld (€)","number");
+  const addBtn=h("button",{class:"btn ghost",style:"margin-top:2px"},["+ Ratenkredit hinzufügen"]);
+  addBtn.addEventListener("click",()=>{
+    const rate=Number(rIn.value||0), rest=Number(sIn.value||0);
+    if(rate<=0 && rest<=0){ toast("Bitte Rate oder Restschuld angeben"); return; }
+    state.ratenkredite.push({ name:nIn.value.trim(), rate:rate, rest:rest }); renderScreenKeepStep();
+  });
+  card.appendChild(nIn); card.appendChild(rIn); card.appendChild(sIn); card.appendChild(addBtn);
+  const tRest=state.ratenkredite.reduce((s,r)=>s+Number(r.rest||0),0);
+  const maxVol=Math.min(RK_MAX, Math.max(0, RK_FAKTOR*c.netto - tRest));
+  const out=h("div",{style:"display:none;margin-top:10px"});
+  const calcBtn=h("button",{class:"btn",style:"margin-top:10px"},["Mögliches Ratenkreditvolumen berechnen"]);
+  calcBtn.addEventListener("click",()=>{
+    let s='<div class="rh">Mögliches Ratenkreditvolumen</div>';
+    s+=statRow("Haushalts-Netto / Monat",'<span class="num">'+eur(c.netto)+'</span>');
+    s+=statRow("Faktor",'<span class="num">× '+RK_FAKTOR+'</span>');
+    s+=statRow("Abzüglich bestehender Restschuld",'<span class="num">− '+eur(tRest)+'</span>');
+    s+=statRow("Möglicher Privatkredit gesamt",'<span class="num">~'+eurK(maxVol)+'</span>',true);
+    s+='<p class="assume">Faustformel: '+RK_FAKTOR+' × Haushalts-Nettoeinkommen abzüglich bestehender Restschulden, gedeckelt auf max. '+eur(RK_MAX)+'. Orientierungswert, keine Kreditzusage – die echte Bonitäts- und Tragfähigkeitsprüfung erfolgt separat.</p>';
+    out.innerHTML=s; out.style.display="block";
+  });
+  card.appendChild(calcBtn); card.appendChild(out);
+  return card;
+}
+
+function rateField(label,key,step,unit,cb){
+  const inp=h("input",{type:"number",step:step||"0.1",style:"width:60px;box-sizing:border-box;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);border-radius:8px;padding:5px 7px;color:#eaf1fb;font-size:13px"});
+  inp.value=state[key];
+  inp.addEventListener("input",()=>{ const v=parseFloat(String(inp.value).replace(",",".")); state[key]=isNaN(v)?0:v; cb(); });
+  return h("label",{style:"display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#cdd9ee"},[ label, inp, h("span",{style:"color:var(--muted)"},[unit||"%"]) ]);
+}
+function baufiCard(c){
+  if(!state.ratenkredite) state.ratenkredite=[];
+  const isEigentum = state.wohnstatus==="eigentum_kredit" || state.wohnstatus==="eigentum_frei";
+  const mode = state.wunsch==="eigennutzung" ? "eigen" : state.wunsch==="kapitalanlage" ? "steuer" : "";
+  if(!mode && !isEigentum) return h("span");
+  const card=h("div",{class:"card",style:"border:1px solid rgba(46,155,240,.3)"});
+  card.appendChild(h("div",{class:"eyebrow",style:"color:var(--cloud)"},["Beratungstool · Finanzierungspotenzial"]));
+
+  if(mode){
+    const out=h("div");
+    const refreshBaufi=()=>{
+      const paar=state.haushalt==="paar";
+      const pausch=paar?HH_PAUSCHALE_2:HH_PAUSCHALE_1;
+      const wohnkosten=(state.wohnstatus==="eigentum_frei")?0:Number(state.miete||0);
+      const rkRaten=state.ratenkredite.reduce((s,r)=>s+Number(r.rate||0),0);
+      const mietEin=Math.round(VERMIET_ANSATZ*Number(state.mieteinnahme||0));
+      let s='<div class="rh">Haushaltsrechnung</div>';
+      s+=statRow("Haushalts-Netto / Monat",'<span class="num">'+eur(c.netto)+'</span>');
+      s+=statRow("− Lebenshaltung pauschal ("+(paar?"2 Pers.":"1 Pers.")+")",'<span class="num">− '+eur(pausch)+'</span>');
+      if(rkRaten>0) s+=statRow("− bestehende Ratenkredite",'<span class="num">− '+eur(rkRaten)+'</span>');
+      if(mode==="eigen"){
+        const freieEigen=Math.max(0, c.netto - pausch - rkRaten);
+        const aEigen=(Number(state.zEigen)+Number(state.tEigen))/100;
+        const darEigen=aEigen>0?Math.round(freieEigen*12/aEigen):0;
+        s+='<div style="height:8px"></div><div class="rh">Einzug ins Eigentum – bisherige Miete entfällt</div>';
+        s+=statRow("= Freie Rate fürs Eigenheim",'<span class="num">'+eur(freieEigen)+'</span>',true);
+        s+=statRow("Max. Darlehen eigengenutzt ("+nf(state.zEigen)+" % + "+nf(state.tEigen)+" %)",'<span class="num">~'+eurK(darEigen)+'</span>',true);
+        s+='<p class="assume">Beim Einzug ins Eigentum entfällt die bisherige Miete und wird zur Finanzierungsrate. Freie Rate × 12 ÷ (Zins + Tilgung). Vereinfacht, keine Finanzierungszusage.</p>';
+      } else {
+        const freieSteuer=Math.max(0, c.netto - pausch - wohnkosten - rkRaten + mietEin);
+        const aSteuer=(Number(state.zSteuer)+Number(state.tSteuer))/100;
+        const darSteuer=aSteuer>0?Math.round(freieSteuer*12/aSteuer):0;
+        s+='<div style="height:8px"></div><div class="rh">Steuersparmodell / Kapitalanlage</div>';
+        if(wohnkosten>0) s+=statRow("− eigene Miete bleibt",'<span class="num">− '+eur(wohnkosten)+'</span>');
+        if(mietEin>0) s+=statRow("+ Mieteinnahme (80 %)",'<span class="num">+ '+eur(mietEin)+'</span>');
+        s+=statRow("= Freie Rate Kapitalanlage",'<span class="num">'+eur(freieSteuer)+'</span>',true);
+        s+=statRow("Max. Darlehen Steuersparmodell ("+nf(state.zSteuer)+" % + "+nf(state.tSteuer)+" %)",'<span class="num">~'+eurK(darSteuer)+'</span>',true);
+        s+='<p class="assume">Beim Steuersparmodell wohnst du weiter zur Miete; 80 % der Mieteinnahme zählen als Einnahme. Freie Rate × 12 ÷ (Zins + Tilgung). Vereinfacht, keine Finanzierungszusage.</p>';
+      }
+      out.innerHTML=s;
+    };
+    const annah=h("div",{style:"background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:12px 0"});
+    annah.appendChild(h("div",{style:"font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px"},["Annahmen anpassen"]));
+    if(mode==="eigen") annah.appendChild(h("div",{style:"display:flex;gap:16px;flex-wrap:wrap"},[ rateField("Zins","zEigen","0.1","%",refreshBaufi), rateField("Tilgung","tEigen","0.1","%",refreshBaufi) ]));
+    else annah.appendChild(h("div",{style:"display:flex;gap:16px;flex-wrap:wrap"},[ rateField("Zins","zSteuer","0.1","%",refreshBaufi), rateField("Tilgung","tSteuer","0.1","%",refreshBaufi) ]));
+    card.appendChild(annah);
+    if(mode==="steuer") card.appendChild(slider("Mieteinnahme bei Vermietung (mtl.)","mieteinnahme",0,3000,50,v=>eur(v),refreshBaufi));
+    card.appendChild(out);
+    refreshBaufi();
+  }
+
+  if(isEigentum){
+    card.appendChild(h("div",{class:"rh",style:"margin-top:14px"},["Sanierungsdarlehen (ohne Grundbucheintrag)"]));
+    const sanOut=h("div");
+    const updateSan=()=>{
+      const betrag=Math.min(SANIERUNG.max,Number(state.sanierungBetrag||0));
+      const rate=annuitaetRate(betrag,Number(state.zSanier),Number(state.jSanier));
+      let s=statRow("Sanierungsbetrag",'<span class="num">'+eurK(betrag)+'</span>');
+      s+=statRow("Monatsrate ("+nf(state.zSanier)+" %, "+state.jSanier+" J.)",'<span class="num">~'+eur(Math.round(rate))+'/Mon.</span>',true);
+      s+='<p class="assume">Für Eigentümer bis '+eurK(SANIERUNG.max)+' ohne Grundbucheintrag. Orientierungswert, keine Zusage.</p>';
+      sanOut.innerHTML=s;
+    };
+    card.appendChild(h("div",{style:"display:flex;gap:16px;flex-wrap:wrap;margin:6px 0 4px"},[ rateField("Zins","zSanier","0.1","%",updateSan), rateField("Laufzeit","jSanier","1","J.",updateSan) ]));
+    card.appendChild(slider("Sanierungsbetrag","sanierungBetrag",0,SANIERUNG.max,5000,v=>eurK(v),updateSan));
+    card.appendChild(sanOut);
+    updateSan();
+  }
+  return card;
+}
+
+function screenInvest(){
+  const c=calc();
+  const H=Math.max(1, RETIRE_AGE - state.alter);
+  const card=h("div",{class:"card"});
+  const donutHost=h("div");
+  const out=h("div",{style:"margin-top:8px"});
+  const vehInputs=[], vehVals=[], vehEffs=[];
+  const refresh=()=>{
+    donutHost.innerHTML=donutSVG();
+    const sum=VEHICLES.reduce((s,v)=>s+Number(state[v.sk]||0),0);
+    let mix=0; if(sum>0){ VEHICLES.forEach(v=>{ mix+=Number(state[v.sk]||0)*(RENDITEN[v.key]||0); }); mix=mix/sum; }
+    const fv=fvAnnuity(sum,mix,H), fvT=fvAnnuity(sum,RENDITEN.tagesgeld,H);
+    let s='<div class="rh">Deine Mischkalkulation</div>';
+    s+=statRow("Monatlich gesamt",'<span class="num">'+eur(sum)+'</span>');
+    s+=statRow("Gewichtete Mischrendite",'<span class="num">'+nf(mix)+' % p.a.</span>',true);
+    s+=statRow("Hochrechnung bis Rente (~"+H+" J.)",'<span class="num">'+eurK(Math.round(fv))+'</span>',true);
+    s+=statRow("Nur Tagesgeld (1 %) wären",'<span class="num">'+eurK(Math.round(fvT))+'</span>');
+    s+=statRow("Mehr durch die Mischung",'<span class="num">~'+eurK(Math.round(fv-fvT))+'</span>',fv>fvT);
+    s+='<p class="assume">Gewichtete Rendite aus deiner Aufteilung (Versicherung 2,5 %, ETF 6 %, Gold 4 %, Tagesgeld 1 %, Immobilie 4,5 %). Beispielwerte, keine Zusage; Endkapital vor Kosten und Steuern.</p>';
+    out.innerHTML=s;
+  };
+  const totVal=h("span",{class:"val"}); totVal.textContent=eur(state.allocTotal);
+  const totInput=h("input",{type:"range",min:100,max:1000,step:25}); totInput.value=state.allocTotal;
+  totInput.addEventListener("input",()=>{
+    state.allocTotal=Number(totInput.value); totVal.textContent=eur(state.allocTotal);
+    VEHICLES.forEach((v,i)=>{ vehInputs[i].max=state.allocTotal; if(state[v.sk]>state.allocTotal){ state[v.sk]=state.allocTotal; vehInputs[i].value=state.allocTotal; vehVals[i].textContent=eur(state[v.sk]); vehEffs[i].textContent=effectFor(v.key,state[v.sk]); } });
+    refresh();
+  });
+  card.appendChild(h("div",{class:"field"},[ h("div",{class:"lab"},[h("span",null,["Monatlich einsetzen"]),totVal]), totInput ]));
+  card.appendChild(donutHost);
+  VEHICLES.forEach((v,i)=>{
+    const valSpan=h("span",{class:"val"}); valSpan.textContent=eur(state[v.sk]); vehVals[i]=valSpan;
+    const input=h("input",{type:"range",min:0,max:state.allocTotal,step:25}); input.value=state[v.sk]; vehInputs[i]=input;
+    const eff=h("div",{style:"font-size:11.5px;color:#8fa3c8;margin:-8px 0 10px 2px"}); eff.textContent=effectFor(v.key,state[v.sk]); vehEffs[i]=eff;
+    input.addEventListener("input",()=>{ state[v.sk]=Number(input.value); valSpan.textContent=eur(state[v.sk]); eff.textContent=effectFor(v.key,state[v.sk]); refresh(); });
+    card.appendChild(h("div",{class:"field"},[ h("div",{class:"lab"},[h("span",null,[v.label]),valSpan]), input ]));
+    card.appendChild(eff);
+  });
+  refresh();
+  return h("div",{class:"screen"},[
+    h("div",{class:"eyebrow",style:"color:var(--cloud)"},["Beratungstool · Investitionsrechner"]),
+    h("h2",{style:"font-size:26px"},["📊 Deine Mischung"]),
+    h("p",{class:"lead"},["Verteil deinen Beitrag auf Versicherung, ETF, Gold, Tagesgeld und Immobilie – und sieh, wie sich die Rendite in der Mischkalkulation entwickelt."]),
+    card, out,
+    h("div",{class:"btnrow"},[ h("button",{class:"btn ghost",style:"flex:.5",onClick:prev},["Zurück"]), h("button",{class:"btn",onClick:next},["Weiter"]) ])
+  ]);
+}
+
+function ablaufStrip(){
+  const cloudFirst = STEPS[1]==="cloud";
+  const st = cloudFirst
+    ? [["☁️","FinanzCloud"],["📝","Datenerfassung"],["📊","Auswertung"]]
+    : [["📝","Datenerfassung"],["☁️","FinanzCloud"],["📊","Auswertung"]];
+  const wrap=h("div",{style:"display:flex;align-items:center;gap:4px;justify-content:center;flex-wrap:wrap"});
+  st.forEach((s,i)=>{
+    if(i>0) wrap.appendChild(h("span",{style:"color:var(--cloud);font-size:14px"},["→"]));
+    wrap.appendChild(h("div",{style:"display:flex;flex-direction:column;align-items:center;gap:3px;min-width:80px"},[
+      h("div",{style:"width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;background:rgba(46,155,240,.12);border:1px solid var(--line)"},[s[0]]),
+      h("div",{style:"font-size:10.5px;color:#cdd9ee;text-align:center;line-height:1.2"},[ h("b",{style:"color:var(--cloud)"},["Schritt "+(i+1)]), h("br"), s[1] ])
+    ]));
+  });
+  return h("div",{class:"card",style:"padding:13px 10px"},[ h("div",{style:"font-size:10.5px;color:var(--muted);text-align:center;margin-bottom:9px;letter-spacing:.06em;text-transform:uppercase"},["So läuft's ab"]), wrap ]);
+}
+
+function screenFamilie(){
+  if(state.kinder===0){
+    const n=LEVELS.indexOf("familie")+1;
+    return h("div",{class:"screen"},[
+      h("div",{class:"eyebrow"},["Level "+n+" von 5"]),
+      h("h2",{style:"font-size:26px"},["👨‍👩‍👧 Familie & Kinder"]),
+      h("p",{class:"lead"},["Aktuell keine Kinder im Haushalt."]),
+      h("div",{class:"res"},[ h("div",{class:"rh"},["Kein Handlungsbedarf"]),
+        h("p",{style:"color:var(--muted);font-size:14px"},["Du hast angegeben, dass keine Kinder im Haushalt leben. Dieser Bereich zählt für dich als vollständig erfüllt. Du kannst direkt weiter."]) ]),
+      h("div",{class:"ptsgain"},["+ 100 Punkte für Familie"]),
+      h("div",{class:"btnrow"},[ h("button",{class:"btn ghost",style:"flex:.5",onClick:prev},["Zurück"]), h("button",{class:"btn",onClick:next},["Weiter"]) ])
+    ]);
+  }
+  return levelShell("familie","👨‍👩‍👧","Familie & Kinder","Die Zukunft deiner Kinder finanziell absichern.",
+    (card,refresh)=>{
+      card.appendChild(slider("Alter des Kindes","kindAlter",0,17,1,v=>v+" J.",refresh));
+      card.appendChild(slider("Zielalter (z. B. Ausbildung)","zielAlter",18,27,1,v=>v+" J.",refresh));
+      card.appendChild(slider("Gewünschtes Zielkapital","zielKapital",5000,100000,2500,v=>eurK(v),refresh));
+      card.appendChild(slider("Vorhandenes Startkapital","startKapital",0,30000,500,v=>eurK(v),refresh));
+      card.appendChild(slider("Mögliches Budget pro Monat","familienBudget",10,400,10,v=>eur(v),refresh));
+    },
+    c=>'<div class="rh">Was es braucht</div>'+
+      statRow("Zeit bis zum Ziel",'<span class="num">'+c.kindJahre+' Jahre</span>')+
+      statRow("Nötige Sparrate pro Monat",'<span class="num">'+eur(c.familieRate)+'</span>',c.familieRate>state.familienBudget)+
+      '<p class="assume">Grobe Schätzung bei ~3 % Rendite p.a. inkl. Verzinsung des Startkapitals.</p>'
+  );
+}
+
+function screenAbsicherung(){
+  return levelShell("absicherung","🛡️","Arbeitskraft absichern","Wie lange trägt dich dein Einkommen, wenn es plötzlich wegfällt?",
+    (card,refresh)=>{
+      if(state.haushalt==="paar"){
+        card.appendChild(h("div",{class:"field"},[ h("div",{class:"lab"},[h("span",null,["Absicherung vorhanden? (du)"])]),
+          choices("absVorhanden",[{v:true,l:"Ja"},{v:false,l:"Nein / unsicher"}],true,refresh) ]));
+        card.appendChild(h("div",{class:"field"},[ h("div",{class:"lab"},[h("span",null,["Absicherung vorhanden? (Partner:in)"])]),
+          choices("absVorhandenPartner",[{v:true,l:"Ja"},{v:false,l:"Nein / unsicher"}],true,refresh) ]));
+      } else {
+        card.appendChild(h("div",{class:"field"},[ h("div",{class:"lab"},[h("span",null,["Absicherung (z. B. BU) vorhanden?"])]),
+          choices("absVorhanden",[{v:true,l:"Ja, vorhanden"},{v:false,l:"Nein / unsicher"}],true,refresh) ]));
+      }
+    },
+    c=>{
+      const paar=state.haushalt==="paar";
+      let s='<div class="rh">Dein wichtigstes Kapital: du selbst</div>';
+      if(paar){
+        s+=statRow("Wert Arbeitskraft du / Partner:in",'<span class="num">'+eurK(c.arbeitskraftA)+' / '+eurK(c.arbeitskraftB)+'</span>');
+        s+=statRow("Wert Arbeitskraft Haushalt",'<span class="num">'+eurK(c.arbeitskraft)+'</span>');
+      } else {
+        s+=statRow("Wert deiner Arbeitskraft bis zur Rente",'<span class="num">'+eurK(c.arbeitskraft)+'</span>');
+      }
+      s+=statRow("Rücklagen reichen für ca.",'<span class="num">'+c.ruecklagenMonate.toFixed(1)+' Monate</span>',c.ruecklagenMonate<3);
+      let note;
+      if(paar){
+        const both=state.absVorhanden&&state.absVorhandenPartner, none=!state.absVorhanden&&!state.absVorhandenPartner;
+        note = both ? "Beide Einkommen sind abgesichert – ob die Höhe zur Lücke passt, klären wir im Termin."
+             : none ? "Für beide Einkommen besteht aktuell keine Absicherung. Risikohinweis, kein Verkauf."
+             : "Ein Einkommen ist abgesichert, das andere nicht – die offene Seite ist dein Risiko.";
+      } else {
+        note = state.absVorhanden ? "Gut: eine Absicherung ist vorhanden. Ob sie zur Lücke passt, klären wir im Termin."
+             : "Ohne Absicherung steht dieser ganze Wert auf dem Spiel. Risikohinweis, kein Verkauf.";
+      }
+      s+='<p class="assume">'+note+'</p>';
+      return s;
+    }
+  );
+}
+
+function impliedReturn(beitrag,jahre,ablauf,bestand){
+  bestand=Number(bestand||0);
+  if(jahre<=0||ablauf<=0) return null;
+  if(beitrag<=0 && bestand<=0) return null;
+  const f=p=>(bestand*Math.pow(1+p/100,jahre)+fvAnnuity(beitrag,p,jahre))-ablauf;
+  let lo=-20,hi=20;
+  if(f(lo)>0) return -20; if(f(hi)<0) return 20;
+  for(let k=0;k<70;k++){ const m=(lo+hi)/2; if(f(m)>0) hi=m; else lo=m; }
+  return (lo+hi)/2;
+}
+// (Anlage-Check ist jetzt in screenVermoegen integriert)
+const ABSETZ_ITEMS=[
+  {label:"iPad",                       kosten:1500},
+  {label:"Smartphone",                 kosten:1000},
+  {label:"Notebook / Mac",             kosten:2000},
+  {label:"Telefon & Internet (jährl.)",kosten:600},
+];
+// Drei Fahrzeug-Angebote (Vorgabewerte). Bearbeitung im Auto-Schritt per PIN.
+// PIN bitte ändern. Hinweis: Diese Sperre verhindert versehentliche/gelegentliche Änderungen,
+// ist aber KEIN echter Schutz – echte Absicherung erfolgt über ein Login im Backend.
+const ADMIN_PIN="1234";
+const AUTOS=[
+  {modell:"VW Golf GTI", leasingrate:218, laufzeit:30, laufleistung:10000, wltp:"WLTP: Kraftstoffverbrauch (komb.) 7,0 l/100 km; CO₂ (komb.) 160 g/km; Effizienzklasse F", fotos:["https://www.grosskundenzentrum-hamburg.de/images/Angebots_PDF/Golf_GTI.jpg"]},
+  {modell:"CUPRA Formentor e-Hybrid", leasingrate:243, laufzeit:24, laufleistung:10000, wltp:"WLTP: Kraftstoffverbrauch (komb.) 5,4 l/100 km; CO₂ (komb.) 34 g/km; Effizienzklasse B", fotos:["https://www.grosskundenzentrum-hamburg.de/images/Angebots_Bilder/Cupra_Formentor.png"]},
+  {modell:"Audi A5 Avant TDI", leasingrate:373, laufzeit:36, laufleistung:10000, wltp:"WLTP: Kraftstoffverbrauch (komb.) 5,0 l/100 km; CO₂ (komb.) 130 g/km; Effizienzklasse D", fotos:["https://www.grosskundenzentrum-hamburg.de/images/Angebots_Bilder/CEB%20Bankshop%20AG/A5%20Avant%202026.png"]},
+];
+function getAutos(){ if(!state.autos) state.autos=AUTOS.map(a=>({...a, fotos:Array.isArray(a.fotos)?a.fotos.slice():[]})); state.autos.forEach(a=>{ if(!Array.isArray(a.fotos)) a.fotos=a.fotoUrl?[a.fotoUrl]:[]; }); return state.autos; }
+function autoFotoEditor(a){
+  const wrap=h("div",{style:"margin:8px 0"});
+  wrap.appendChild(h("div",{style:"font-size:11.5px;color:#9fb3d6;margin-bottom:6px"},["Fotos (mehrere möglich)"]));
+  if(a.fotos && a.fotos.length){
+    const grid=h("div",{style:"display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px"});
+    a.fotos.forEach((src,i)=>{
+      const rm=h("div",{style:"position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:#c0364a;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;cursor:pointer"},["✕"]);
+      rm.addEventListener("click",()=>{ a.fotos.splice(i,1); renderScreenKeepStep(); });
+      grid.appendChild(h("div",{style:"position:relative;width:74px;height:56px"},[ h("img",{src:src,style:"width:74px;height:56px;border-radius:8px;object-fit:cover;display:block"}), rm ]));
+    });
+    wrap.appendChild(grid);
+  }
+  const inp=h("input",{type:"file",accept:"image/*",multiple:"true",style:"display:none"});
+  inp.addEventListener("change",()=>{
+    const files=Array.prototype.slice.call(inp.files||[]); let pending=files.length; if(!pending) return;
+    files.forEach(f=>{ const rd=new FileReader(); rd.onload=()=>{ a.fotos.push(rd.result); pending--; if(pending<=0) renderScreenKeepStep(); }; rd.onerror=()=>{ pending--; if(pending<=0) renderScreenKeepStep(); }; rd.readAsDataURL(f); });
+  });
+  const btn=h("button",{class:"btn ghost",style:"font-size:12.5px;padding:8px 12px"},["+ Fotos hochladen"]);
+  btn.addEventListener("click",()=>inp.click());
+  wrap.appendChild(btn); wrap.appendChild(inp);
+  return wrap;
+}
+function autoGallery(a){
+  if(a.fotos && a.fotos.length){
+    const strip=h("div",{style:"display:flex;gap:8px;overflow-x:auto;margin-bottom:10px;padding-bottom:4px"});
+    a.fotos.forEach(src=>{ strip.appendChild(h("img",{src:src,alt:a.modell,style:"height:150px;min-width:78%;border-radius:12px;object-fit:cover;flex:0 0 auto;display:block"})); });
+    return strip;
+  }
+  return h("div",{style:"background:rgba(255,255,255,.05);border:1.5px dashed rgba(255,255,255,.18);border-radius:12px;height:120px;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px"},[
+    h("div",{style:"font-size:30px"},["🚗"]), h("div",{style:"font-size:11px;color:#9fb3d6"},["kein Foto hinterlegt"])
+  ]);
+}
+function autoMoreField(){
+  const inp=h("input",{type:"text",value:state.autoMehrUrl||"",placeholder:"https://…",style:"width:100%;box-sizing:border-box;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:9px 11px;color:#eaf1fb;font-size:13px"});
+  inp.addEventListener("input",()=>{ state.autoMehrUrl=inp.value.trim(); });
+  return h("div",{class:"card"},[ h("div",{style:"font-family:Space Grotesk;font-weight:700;font-size:14px;color:var(--gold);margin-bottom:4px"},["Mehr Fahrzeuge"]), h("div",{style:"font-size:11.5px;color:#9fb3d6;margin-bottom:6px"},["Link zu einer Seite mit weiteren Fahrzeugen (öffnet extern)"]), inp ]);
+}
+function minAutoRate(){ const r=getAutos().map(a=>Number(a.leasingrate)).filter(x=>x>0); return r.length?Math.min.apply(null,r):0; }
+function screenSteuer(){
+  const c=calc();
+  const grenz=c.grenzSteuer, jahre=c.jahreBisRente, frei=Number(state.freiBudget);
+  const basisVorteil=c.basisSteuer;
+  const immoSteuer=c.kapitalMode?Math.round(0.025*0.80*c.immoRahmen*grenz):0;
+  const kapitalLiegen=fvAnnuity(frei,6,jahre);
+  if(!Array.isArray(state.nebenSel) || state.nebenSel.length!==ABSETZ_ITEMS.length) state.nebenSel=ABSETZ_ITEMS.map(()=>true);
+  const selVorteil=()=>ABSETZ_ITEMS.reduce((s,it,i)=>s+(state.nebenSel[i]?Math.round(it.kosten*grenz):0),0);
+  const heroSteuerVal=()=>basisVorteil+immoSteuer+(state.nebenJa?selVorteil():0);
+
+  // Hero (Steuern) – referenzierbar, springt live beim Spielen
+  const heroNum=h("div",{style:"font-family:Space Grotesk;font-weight:700;font-size:23px;color:var(--gold);transition:color .2s"},["~"+eurK(heroSteuerVal())]);
+  const heroTax=h("div",{style:"flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:16px 12px;text-align:center"},[
+    heroNum, h("div",{style:"font-size:10.5px;color:#9fb3d6;margin-top:5px;line-height:1.3"},["Steuern, die du pro Jahr verschenkst"])
+  ]);
+  const heroCap=h("div",{style:"flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:16px 12px;text-align:center"},[
+    h("div",{style:"font-family:Space Grotesk;font-weight:700;font-size:23px;color:var(--pulse)"},["~"+eurK(kapitalLiegen)]),
+    h("div",{style:"font-size:10.5px;color:#9fb3d6;margin-top:5px;line-height:1.3"},["Vermögen, das du über "+jahre+" Jahre liegen lassen"])
+  ]);
+
+  const card=h("div",{class:"card"});
+  let s='<div class="rh">Deine ungenutzten Steuer-Hebel</div>';
+  s+=statRow("Altersvorsorge nach § 10 EStG",'<span class="num">~'+eur(basisVorteil)+'/Jahr</span>');
+  if(c.kapitalMode) s+=statRow("Steuersparimmobilie",'<span class="num">~'+eur(immoSteuer)+'/Jahr</span>');
+  s+='<p class="assume">Grobe Beispielrechnung über einen angenommenen Grenzsteuersatz von ~'+Math.round(grenz*100)+' %. Privat über § 10 EStG, betrieblich über § 3 Nr. 63 EStG nutzbar. Keine Steuerberatung – der genaue Hebel entsteht im Termin.</p>';
+  card.innerHTML=s;
+
+  // Nebentätigkeit – interaktiv per Ja/Nein, dann spielbar
+  const nebenCard=h("div",{class:"card",style:"border-color:rgba(246,180,60,.35)"});
+  nebenCard.appendChild(h("div",{class:"rh",style:"color:var(--gold)"},["Dein stärkster Hebel: nebenberuflich tätig werden?"]));
+  nebenCard.appendChild(h("p",{style:"font-size:13px;color:#cdd9ee;line-height:1.45;margin:4px 0 12px"},["Als Einsatzvertreter mit uns – ohne eigene Zulassung – baust du ein zweites Einkommen auf. Und plötzlich werden private Anschaffungen zu Betriebsausgaben."]));
+
+  const toggle=h("div",{class:"choices two"});
+  [["nein","Nein"],["ja","Ja – durchspielen"]].forEach(([v,l])=>{
+    const cur=state.nebenJa?"ja":"nein";
+    const b=h("button",{class:"chip"+(cur===v?" sel":"")},[l]);
+    b.addEventListener("click",()=>{ state.nebenJa=(v==="ja"); renderScreenKeepStep(); });
+    toggle.appendChild(b);
+  });
+  nebenCard.appendChild(toggle);
+
+  if(!state.nebenJa){
+    nebenCard.appendChild(h("p",{style:"font-size:12.5px;color:#9fb3d6;line-height:1.45;margin-top:12px"},["Schon eine kleine nebenberufliche Tätigkeit macht Anschaffungen absetzbar. Tippe auf „Ja“, und spiel durch, was du dir holen würdest."]));
+  } else {
+    nebenCard.appendChild(h("p",{style:"font-size:12.5px;color:#9fb3d6;line-height:1.45;margin:12px 0 10px"},["Tippe an, was du anschaffen würdest – dein Steuervorteil rechnet sich live mit:"]));
+
+    const totalEl=h("div",{style:"text-align:center;font-family:Space Grotesk;font-weight:700;font-size:17px;color:var(--gold);margin:2px 0 12px"});
+    const refresh=()=>{ totalEl.textContent="Dein Steuervorteil: ~"+eur(selVorteil())+" / Jahr"; heroNum.textContent="~"+eurK(heroSteuerVal()); };
+
+    const grid=h("div",{style:"display:flex;flex-direction:column;gap:8px"});
+    ABSETZ_ITEMS.forEach((it,i)=>{
+      const v=Math.round(it.kosten*grenz);
+      const labelEl=h("div",{style:"font-size:13px;color:#eaf1fb;font-weight:600"},[(state.nebenSel[i]?"✓ ":"")+it.label]);
+      const valEl=h("div",{style:"font-family:Space Grotesk;font-weight:700;font-size:14px;color:"+(state.nebenSel[i]?"var(--gold)":"#6b7c9e")},["~"+eur(v)]);
+      const chip=h("div",{style:chipStyle(state.nebenSel[i])},[
+        h("div",null,[ labelEl, h("div",{style:"font-size:11px;color:#9fb3d6"},["Anschaffung "+eur(it.kosten)]) ]),
+        valEl
+      ]);
+      chip.addEventListener("click",()=>{
+        state.nebenSel[i]=!state.nebenSel[i];
+        chip.setAttribute("style",chipStyle(state.nebenSel[i]));
+        labelEl.textContent=(state.nebenSel[i]?"✓ ":"")+it.label;
+        valEl.style.color=state.nebenSel[i]?"var(--gold)":"#6b7c9e";
+        refresh();
+      });
+      grid.appendChild(chip);
+    });
+    nebenCard.appendChild(grid);
+    nebenCard.appendChild(totalEl);
+    refresh();
+
+    const carBox=h("div",{style:"cursor:pointer;background:rgba(246,180,60,.12);border:1px solid rgba(246,180,60,.3);border-radius:12px;padding:13px;text-align:center"},[
+      h("div",{style:"font-family:Space Grotesk;font-weight:700;font-size:21px;color:var(--gold)"},["Und dein Auto: ab ~"+eur(minAutoRate())+" / Monat"]),
+      h("div",{style:"font-size:11px;color:#cdd9ee;margin-top:3px"},["Großhandelsrabatt + Absetzbarkeit · tippen für Details →"])
+    ]);
+    carBox.addEventListener("click",()=>go("auto"));
+    nebenCard.appendChild(carBox);
+
+    nebenCard.appendChild(h("p",{class:"assume"},["Voraussetzung ist eine echte nebenberufliche Tätigkeit mit Gewinnerzielungsabsicht; die Privatnutzung wird versteuert. Vereinfachtes Beispiel, keine Steuerberatung."]));
+  }
+
+  return h("div",{class:"screen"},[
+    h("div",{class:"eyebrow"},["Was du aktuell liegen lässt"]),
+    h("h2",{style:"font-size:26px"},["💸 Steuern & Chancen"]),
+    h("p",{class:"lead"},["Sieh, wie viel Jahr für Jahr ungenutzt liegen bleibt – und spiel deinen stärksten Hebel durch."]),
+    h("div",{style:"display:flex;gap:10px;margin-bottom:16px"},[ heroTax, heroCap ]),
+    card,
+    nebenCard,
+    h("div",{class:"btnrow"},[ h("button",{class:"btn ghost",style:"flex:.5",onClick:prev},["Zurück"]), h("button",{class:"btn",onClick:next},["Weiter"]) ])
+  ]);
+}
+function chipStyle(on){
+  return "cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border-radius:11px;transition:all .15s;"+
+    "border:1px solid "+(on?"rgba(246,180,60,.45)":"rgba(255,255,255,.12)")+";background:"+(on?"rgba(246,180,60,.1)":"transparent");
+}
+// Detailseite Auto: 3 Fahrzeuge, per PIN-Schloss bearbeitbar.
+function autoErklaerCard(){
+  const step=(n,txt,last)=>h("div",{style:"display:flex;gap:11px;align-items:flex-start;padding:10px 0"+(last?"":";border-bottom:1px solid rgba(255,255,255,.06)")},[
+    h("div",{style:"flex:none;width:24px;height:24px;border-radius:50%;background:rgba(246,180,60,.18);color:var(--gold);font-family:Space Grotesk;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center"},[String(n)]),
+    h("div",{style:"font-size:13px;color:#cdd9ee;line-height:1.4"},[txt])
+  ]);
+  return h("div",{class:"card"},[
+    h("div",{class:"rh"},["So funktioniert's"]),
+    step(1,"Du wirst nebenberuflich als Einsatzvertreter mit uns tätig – ohne eigene Zulassung."),
+    step(2,"Über unseren Großhandelsrabatt erhältst du dein Wunschfahrzeug deutlich günstiger als im Handel."),
+    step(3,"Als Betriebsfahrzeug sind Anschaffung und laufende Kosten anteilig steuerlich absetzbar."),
+    step(4,"Unterm Strich bleibt eine kleine monatliche Rate.",true)
+  ]);
+}
+function autoEditField(label,obj,key,type){
+  const inp=h("input",{type:type,value:obj[key],style:"width:100%;box-sizing:border-box;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:9px 11px;color:#eaf1fb;font-size:13px;font-family:Inter"});
+  inp.addEventListener("input",()=>{ obj[key]=(type==="number")?Number(inp.value):inp.value; });
+  return h("div",{style:"margin:8px 0"},[ h("div",{style:"font-size:11.5px;color:#9fb3d6;margin-bottom:4px"},[label]), inp ]);
+}
+function autoLockBar(){
+  const pin=h("input",{type:"password",placeholder:"PIN",style:"width:120px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:8px 10px;color:#eaf1fb;font-size:13px"});
+  const ok=h("button",{class:"btn",style:"flex:none;padding:8px 14px;font-size:13px"},["Entsperren"]);
+  const msg=h("div",{style:"text-align:center;color:#ff8a8a;font-size:11px;margin-top:6px;display:none"},["Falsche PIN"]);
+  const pinBox=h("div",{style:"margin-top:10px;display:none;gap:8px;justify-content:center"},[pin,ok]);
+  const row=h("div",{style:"display:flex;align-items:center;gap:7px;justify-content:center;color:#9fb3d6;font-size:12px;cursor:pointer;margin-top:8px"},[h("span",null,["🔒"]),h("span",null,["Fahrzeug-Angebote bearbeiten"])]);
+  let open=false;
+  row.addEventListener("click",()=>{ open=!open; pinBox.style.display=open?"flex":"none"; });
+  ok.addEventListener("click",()=>{ if(pin.value===ADMIN_PIN){ state.autoLocked=false; renderScreenKeepStep(); } else { msg.style.display="block"; } });
+  return h("div",null,[row,pinBox,msg]);
+}
+function screenAuto(){
+  const autos=getAutos();
+  const kids=[
+    h("div",{class:"eyebrow"},["Extra · Fahrzeug-Angebote"]),
+    h("h2",{style:"font-size:25px"},["🚗 Dein Auto ab ~"+eur(minAutoRate())+" / Monat"]),
+    h("p",{class:"lead"},["Großhandelsrabatt plus steuerliche Absetzbarkeit – wähl dein Wunschfahrzeug."])
+  ];
+  if(state.autoLocked){
+    autos.forEach(a=>{
+      const card=h("div",{class:"card"});
+      card.appendChild(autoGallery(a));
+      const info=h("div");
+      info.innerHTML='<div style="font-family:Space Grotesk;font-weight:700;font-size:16px;color:#eaf1fb;margin-bottom:6px">'+a.modell+'</div>'+
+        statRow("Leasingrate (netto)",'<span class="num">'+eur(a.leasingrate)+' / Monat</span>')+
+        statRow("Laufzeit",'<span class="num">'+a.laufzeit+' Monate</span>')+
+        (a.laufleistung?statRow("Laufleistung",'<span class="num">'+String(Number(a.laufleistung)).replace(/\B(?=(\d{3})+(?!\d))/g,".")+' km / Jahr</span>'):"")+
+        (a.wltp?'<p class="assume" style="margin-top:8px;margin-bottom:0">'+a.wltp+'</p>':"");
+      card.appendChild(info);
+      kids.push(card);
+    });
+    kids.push(autoErklaerCard());
+    kids.push(h("p",{class:"assume"},["Alle Raten verstehen sich netto (zzgl. USt.), bei 10.000 km/Jahr. Vereinfachtes Beispiel, keine Steuerberatung. Rate abhängig von Fahrzeug, Nutzung und steuerlicher Situation; Privatnutzung wird versteuert."]));
+    kids.push(h("p",{class:"assume",style:"margin-top:6px"},["Die angegebenen Verbrauchs- und Emissionswerte wurden nach dem gesetzlich vorgeschriebenen Messverfahren (WLTP) ermittelt. Sie dienen Vergleichszwecken und sind nicht Bestandteil des Angebots. Weitere Details über deinen Berater oder den Link „Weitere Fahrzeuge\u201c."]));
+    if(state.autoMehrUrl){ const mb=h("button",{class:"btn",style:"margin-top:4px"},["Weitere Fahrzeuge ansehen →"]); mb.addEventListener("click",()=>{ try{ window.open(state.autoMehrUrl,"_blank","noopener"); }catch(e){} }); kids.push(mb); }
+    kids.push(autoLockBar());
+  } else {
+    kids.push(h("p",{style:"text-align:center;color:var(--gold);font-size:12px;margin:-6px 0 4px"},["🔓 Bearbeitungsmodus – Angaben werden gespeichert, sobald du sperrst."]));
+    autos.forEach((a,i)=>{
+      const card=h("div",{class:"card"});
+      card.appendChild(h("div",{style:"font-family:Space Grotesk;font-weight:700;font-size:14px;color:var(--gold);margin-bottom:4px"},["Fahrzeug "+(i+1)]));
+      card.appendChild(autoEditField("Modell",a,"modell","text"));
+      card.appendChild(autoFotoEditor(a));
+      card.appendChild(autoEditField("Leasingrate netto (€/Monat)",a,"leasingrate","number"));
+      card.appendChild(autoEditField("Laufzeit (Monate)",a,"laufzeit","number"));
+      card.appendChild(autoEditField("Laufleistung (km/Jahr)",a,"laufleistung","number"));
+      kids.push(card);
+    });
+    kids.push(autoMoreField());
+    const lockBtn=h("button",{class:"btn",style:"margin-top:4px"},["🔒 Angaben sperren"]);
+    lockBtn.addEventListener("click",()=>{ state.autoLocked=true; renderScreenKeepStep(); });
+    kids.push(lockBtn);
+  }
+  kids.push(h("button",{class:"btn ghost",style:"margin-top:10px",onClick:()=>go("steuer")},["Zurück zu Steuern & Chancen"]));
+  return h("div",{class:"screen"},kids);
+}
+const VEHICLES=[
+  {key:"basis", sk:"allocBasis", label:"Altersvorsorge (§ 10 EStG)", color:"#3fe0c7"},
+  {key:"etf", sk:"allocEtf", label:"ETF-Sparplan", color:"#2e9bf0"},
+  {key:"tagesgeld", sk:"allocTagesgeld", label:"Tagesgeld", color:"#8aa0c8"},
+  {key:"gold", sk:"allocGold", label:"Goldsparplan", color:"#f6b43c"},
+  {key:"immo", sk:"allocImmo", label:"Immobilie (Vermietung)", color:"#7b6cf6"},
+];
+function effectFor(key,val){
+  const H=Math.max(1, RETIRE_AGE - state.alter);
+  if(val<=0) return "noch nichts zugeteilt";
+  if(key==="basis")     return "Altersvorsorge + ~"+eur(Math.round(val*12*0.3))+" Steuervorteil/Jahr vom Staat";
+  if(key==="etf")       return "~"+eurK(fvAnnuity(val,6,H))+" in "+H+" Jahren";
+  if(key==="tagesgeld") return "Sicheres Polster: ~"+eurK(val*12)+" pro Jahr griffbereit";
+  if(key==="gold")      return "~"+eurK(fvAnnuity(val,4,H))+" in "+H+" J., inflationsgeschützt";
+  if(key==="immo")      return "vermietete Wohnung bis ~"+eurK(val*12/0.045)+" finanzierbar";
+  return "";
+}
+function donutSVG(){
+  const segs=VEHICLES.map(v=>({v:state[v.sk], c:v.color}));
+  const sum=segs.reduce((s,x)=>s+x.v,0);
+  const frei=Math.max(0,state.allocTotal-sum);
+  const all=segs.slice(); if(frei>0) all.push({v:frei,c:"rgba(255,255,255,.10)"});
+  const total=Math.max(sum+frei,1);
+  const R=52, sw=18, C=2*Math.PI*R, cx=64, cy=64;
+  let off=0, arcs="";
+  all.forEach(s=>{
+    if(s.v<=0) return;
+    const len=C*(s.v/total);
+    arcs+='<circle cx="'+cx+'" cy="'+cy+'" r="'+R+'" fill="none" stroke="'+s.c+'" stroke-width="'+sw+'" stroke-dasharray="'+len.toFixed(2)+' '+(C-len).toFixed(2)+'" stroke-dashoffset="'+(-off).toFixed(2)+'" transform="rotate(-90 '+cx+' '+cy+')"/>';
+    off+=len;
+  });
+  return '<svg width="128" height="128" viewBox="0 0 128 128" style="display:block;margin:6px auto 0">'+arcs+
+    '<text x="'+cx+'" y="'+(cy-1)+'" text-anchor="middle" fill="#eaf1fb" style="font-family:Space Grotesk;font-weight:700;font-size:18px">'+eur(sum)+'</text>'+
+    '<text x="'+cx+'" y="'+(cy+15)+'" text-anchor="middle" fill="#9fb3d6" style="font-family:Inter;font-size:9px">verteilt</text></svg>';
+}
+function screenStruktur(){
+  const card=h("div",{class:"card"});
+  const donutHost=h("div");
+  const freiNode=h("div",{style:"text-align:center;font-family:Space Grotesk;font-weight:600;font-size:13px;margin:6px 0 4px"});
+  const vehInputs=[], vehEffs=[], vehVals=[];
+  const refresh=()=>{
+    donutHost.innerHTML=donutSVG();
+    const sum=VEHICLES.reduce((s,v)=>s+state[v.sk],0), frei=state.allocTotal-sum;
+    freiNode.innerHTML = frei>0 ? ('Noch frei: <span style="color:var(--pulse)">'+eur(frei)+'</span>')
+      : (frei<0 ? ('<span style="color:var(--warn)">Über Budget: '+eur(-frei)+'</span>')
+      : '<span style="color:var(--pulse)">Vollständig verteilt ✓</span>');
+  };
+  // Gesamtbetrag (aktualisiert die Vehikel-Regler live, ohne Neu-Rendern)
+  const totVal=h("span",{class:"val"}); totVal.textContent=eur(state.allocTotal);
+  const totInput=h("input",{type:"range",min:100,max:1000,step:25}); totInput.value=state.allocTotal;
+  totInput.addEventListener("input",()=>{
+    state.allocTotal=Number(totInput.value); totVal.textContent=eur(state.allocTotal);
+    VEHICLES.forEach((v,i)=>{
+      vehInputs[i].max=state.allocTotal;
+      if(state[v.sk]>state.allocTotal){ state[v.sk]=state.allocTotal; vehInputs[i].value=state.allocTotal; vehVals[i].textContent=eur(state[v.sk]); vehEffs[i].textContent=effectFor(v.key,state[v.sk]); }
+    });
+    refresh();
+  });
+  card.appendChild(h("div",{class:"field"},[ h("div",{class:"lab"},[h("span",null,["Monatlich einsetzen"]),totVal]), totInput ]));
+  card.appendChild(donutHost);
+  card.appendChild(freiNode);
+  VEHICLES.forEach((v,i)=>{
+    const valSpan=h("span",{class:"val"}); valSpan.textContent=eur(state[v.sk]); vehVals[i]=valSpan;
+    const input=h("input",{type:"range",min:0,max:state.allocTotal,step:25}); input.value=state[v.sk]; vehInputs[i]=input;
+    const eff=h("div",{style:"font-size:11.5px;color:#8fa3c8;margin:-8px 0 10px 2px"}); eff.textContent=effectFor(v.key,state[v.sk]); vehEffs[i]=eff;
+    input.addEventListener("input",()=>{ state[v.sk]=Number(input.value); valSpan.textContent=eur(state[v.sk]); eff.textContent=effectFor(v.key,state[v.sk]); refresh(); });
+    card.appendChild(h("div",{class:"field"},[ h("div",{class:"lab"},[h("span",null,[v.label]),valSpan]), input ]));
+    card.appendChild(eff);
+  });
+  refresh();
+  return h("div",{class:"screen"},[
+    h("div",{class:"eyebrow"},["So könntest du es gestalten"]),
+    h("h2",{style:"font-size:26px"},["Verteil dein Budget"]),
+    h("p",{class:"lead"},["Schieb dein monatliches Budget auf die Bausteine – und sieh sofort, was daraus werden kann."]),
+    card,
+    h("p",{class:"assume",style:"margin-top:14px"},["Vereinfachte Beispiele aus deinen Angaben, keine Beratung. Deinen genauen Mix legen wir im Termin fest."]),
+    h("button",{class:"btn",style:"margin-top:8px",onClick:next},["Weiter zur persönlichen KI-Auswertung"]),
+    h("button",{class:"back",onClick:()=>go("auswertung")},["Zurück zum Ergebnis"])
+  ]);
+}
+function screenAuswertung(){
+  const c=calc();
+  ensureDNA();
+  const ringWrap=h("div");
+  ringWrap.innerHTML='<svg class="ring" width="190" height="190" viewBox="0 0 190 190"><defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#2e9bf0"/><stop offset="100%" stop-color="#3fe0c7"/></linearGradient></defs>'+
+    '<circle cx="95" cy="95" r="78" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="12"/>'+
+    '<circle id="ringfg" cx="95" cy="95" r="78" fill="none" stroke="url(#rg)" stroke-width="12" stroke-linecap="round" transform="rotate(-90 95 95)"/>'+
+    '<text id="ringnum" x="95" y="90" text-anchor="middle" fill="#fff" style="font-family:Space Grotesk;font-weight:700;font-size:40px">0</text>'+
+    '<text x="95" y="116" text-anchor="middle" fill="#9fb3d6" style="font-family:Space Grotesk;font-size:14px;letter-spacing:.08em">von 500</text></svg>';
+  const AREAS=[
+    {k:"rente",l:"Altersvorsorge / Rente"},
+    {k:"eigentum",l:"Eigentum / Immobilie"},
+    {k:"vermoegen",l:"Vermögen / Geldanlage"},
+    {k:"familie",l:"Familie & Kinder"},
+    {k:"absicherung",l:"Absicherung"},
+    {k:"steuern",l:"Steuern & Subventionen"},
+  ];
+  const PWORDS=["unwichtig","eher gering","neutral","wichtig","sehr wichtig"];
+  const TYP_NAMES={ rente:"Vorsorge-Typ", eigentum:"Immobilien-Typ", vermoegen:"Vermögensaufbauer", familie:"Familienmensch", absicherung:"Sicherheits-Typ", steuern:"Steuer-Optimierer" };
+  const standOf=k=>Math.round(c.cov[k]);
+
+  const typEl=h("div",{class:"typ"});
+  const updateTyp=()=>{ const top=Object.keys(state.prio).reduce((a,b)=>state.prio[b]>state.prio[a]?b:a,"rente"); typEl.textContent=TYP_NAMES[top]; };
+  updateTyp();
+
+  const wegText=h("p",{style:"color:var(--muted);font-size:13.5px;line-height:1.6"});
+  const updateWeg=()=>{
+    const w=AREAS.map(a=>({l:a.l,s:state.prio[a.k]*(100-standOf(a.k))})).sort((x,y)=>y.s-x.s).slice(0,2).map(x=>x.l);
+    wegText.textContent="Mit Blick auf deine Prioritäten lohnt sich der erste Schritt bei "+w.join(" und ")+". Genau das vertiefen wir in deiner KI-Auswertung.";
+  };
+
+  const prioCard=h("div",{class:"card"});
+  prioCard.appendChild(h("div",{class:"sublabel"},["Deine Prioritäten & dein Stand"]));
+  prioCard.appendChild(h("p",{style:"color:var(--muted);font-size:12px;margin:-2px 0 6px"},["Stell ein, was dir wichtig ist – wo hohe Priorität auf einen niedrigen Stand trifft, liegt dein Handlungsbedarf."]));
+  AREAS.forEach(a=>{
+    const stand=standOf(a.k);
+    const row=h("div",{style:"padding:12px 0;border-bottom:1px solid rgba(255,255,255,.06)"});
+    row.appendChild(h("div",{style:"display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px"},[
+      h("b",{style:"font-size:13.5px;color:#eaf1fb"},[a.l]),
+      h("span",{style:"font-size:12px;color:#9fb3d6;font-family:Space Grotesk"},["Stand "+stand+" %"])
+    ]));
+    row.appendChild(h("div",{class:"track"},[ h("div",{class:"fill"+(stand<50?" low":""),style:"width:"+stand+"%"}) ]));
+    const valSpan=h("span",{class:"val"}); valSpan.textContent=PWORDS[state.prio[a.k]-1];
+    const flag=h("span",{style:"font-size:11px;color:var(--gold);font-family:Space Grotesk;font-weight:600"});
+    const updateFlag=()=>{ flag.textContent=(state.prio[a.k]>=4&&stand<50)?"● Handlungsbedarf":""; };
+    const input=h("input",{type:"range",min:1,max:5,step:1}); input.value=state.prio[a.k];
+    input.addEventListener("input",()=>{ state.prio[a.k]=Number(input.value); valSpan.textContent=PWORDS[state.prio[a.k]-1]; updateFlag(); updateWeg(); updateTyp(); });
+    row.appendChild(h("div",{style:"display:flex;justify-content:space-between;align-items:center;margin-top:9px"},[
+      h("span",{style:"font-size:11.5px;color:#8fa3c8"},["Priorität"]),
+      h("span",{style:"display:flex;gap:9px;align-items:center"},[flag,valSpan])
+    ]));
+    row.appendChild(input);
+    updateFlag();
+    prioCard.appendChild(row);
+  });
+  updateWeg();
+  const wegCard=h("div",{class:"card"},[ h("div",{class:"sublabel"},["Dein Weg"]), wegText,
+    h("p",{class:"assume",style:"margin-top:10px"},["Vereinfachte Annahmen aus deinen Angaben. Die Details klären wir im Gespräch."]) ]);
+
+  // Ziele & Wünsche: monatlich investierbar (vorbelegt) + Gesamtvermögen (vorbelegt)
+  const monRente=Number(state.vorhandeneRente||0);
+  const monAnlage=Number(state.anlageBeitrag||0);
+  const monFamilie=(Number(state.kinder)>0)?Number(state.familienBudget||0):0;
+  const bereitsMonat=monRente+monAnlage+monFamilie;
+  if(!state.budgetPreset){ state.freiBudget=Math.min(2500,bereitsMonat); state.budgetPreset=true; }
+
+  const capRente=Number(state.vorhandenKapital||0), capFamilie=Number(state.startKapital||0), capEK=Number(state.eigenkapital||0), capAnlage=Number(state.anlageBestand||0);
+  const bereitsKapital=capRente+capFamilie+capEK+capAnlage;
+  const floorK=Math.min(bereitsKapital,200000);
+  if(Number(state.vermoegen)<floorK) state.vermoegen=floorK;
+
+  // Dezente Übersicht für ganz oben (fast unsichtbar, aber erkennbar)
+  const faintCss="font-size:10.5px;color:#5d6f91;line-height:1.6";
+  const monParts=[["Rente",monRente],["Vermögen",monAnlage],["Familie",monFamilie]].filter(x=>x[1]>0).map(x=>x[0]+" "+eur(x[1])).join(" · ");
+  const capParts=[["Rente",capRente],["Familie",capFamilie],["Eigenkapital",capEK],["Geldanlage",capAnlage]].filter(x=>x[1]>0).map(x=>x[0]+" "+eurK(x[1])).join(" · ");
+  const faintStrip=h("div",{style:"text-align:center;margin:-2px 0 12px"},[
+    bereitsMonat>0?h("div",{style:faintCss},["monatlich aktiv ~"+eur(bereitsMonat)+(monParts?"  ·  "+monParts:"")]):h("span"),
+    bereitsKapital>0?h("div",{style:faintCss},["Vermögen heute ~"+eurK(bereitsKapital)+(capParts?"  ·  "+capParts:"")]):h("span")
+  ]);
+
+  const budgetVal=h("span",{class:"val"});
+  const budgetInput=h("input",{type:"range",min:0,max:2500,step:25}); budgetInput.value=state.freiBudget;
+  const setB=()=>budgetVal.textContent=eur(Number(state.freiBudget))+"/Mon.";
+  setB();
+  budgetInput.addEventListener("input",()=>{ state.freiBudget=Number(budgetInput.value); setB(); });
+
+  const wealthVal=h("span",{class:"val"});
+  const wealthInput=h("input",{type:"range",min:floorK,max:200000,step:1000}); wealthInput.value=state.vermoegen;
+  const setW=()=>wealthVal.textContent=Number(state.vermoegen)>=200000?"200 Tsd. €+":eurK(Number(state.vermoegen));
+  setW();
+  wealthInput.addEventListener("input",()=>{ state.vermoegen=Number(wealthInput.value); setW(); });
+  wealthInput.addEventListener("change",()=>renderScreenKeepStep());
+
+  const zieleCard=h("div",{class:"card"},[
+    h("div",{class:"sublabel"},["Und jetzt: deine Ziele & Wünsche"]),
+    h("p",{style:"color:var(--muted);font-size:12px;margin:-2px 0 12px"},["Das ist deine heutige Lage. Die spannende Frage ist: Was willst du daraus machen?"]),
+    h("div",{style:"font-size:13.5px;color:#eaf1fb;line-height:1.4;margin-bottom:2px"},["Wie viel investierst du monatlich für deine Ziele – wozu wärst du zusätzlich bereit?"]),
+    (bereitsMonat>0?h("div",{style:"font-size:11.5px;color:#8fa3c8;margin:2px 0 6px 2px"},["💡 schon ~"+eur(bereitsMonat)+"/Monat aktiv – schieb höher für mehr."]):h("span")),
+    h("div",{class:"field"},[ h("div",{class:"lab"},[ h("span",null,["Pro Monat für deine Ziele"]), budgetVal ]), budgetInput ]),
+    h("div",{style:"font-size:13.5px;color:#eaf1fb;line-height:1.4;margin:12px 0 2px"},["Wie hoch ist dein geschätztes Gesamtvermögen heute?"]),
+    (bereitsKapital>0?h("div",{style:"font-size:11.5px;color:#8fa3c8;margin:0 0 6px 2px"},["💡 schon ~"+eurK(bereitsKapital)+" zusammengekommen – schieb höher, wenn du mehr hast."]):h("span")),
+    h("div",{class:"field"},[ h("div",{class:"lab"},[ h("span",null,["Geschätztes Vermögen"]), wealthVal ]), wealthInput ])
+  ]);
+
+  const screen=h("div",{class:"screen"},[
+    h("div",{class:"eyebrow"},["Deine FinanzDNA"]),
+    h("h2",{style:"font-size:26px"},["Das ist dein Ergebnis"]),
+    h("div",{style:"text-align:center;margin:2px 0 6px"},[ h("span",{style:"display:inline-block;font-family:Space Grotesk;font-weight:700;font-size:13px;color:var(--cloud);border:1px solid var(--cloud);border-radius:999px;padding:4px 12px"},["FinanzDNA #"+state.dnaNummer]) ]),
+    ringWrap,
+    h("div",{class:"ringlabel"},[ typEl, h("div",{class:"big"},["Dein Finanztyp"]) ]),
+    faintStrip,
+    prioCard,
+    wegCard,
+    h("div",{class:"compare",html:'Du bist besser aufgestellt als <b>'+c.pct+' %</b><br><span style="color:var(--muted);font-size:12.5px">vergleichbarer Teilnehmer (Vergleichswert)</span>'}),
+    zieleCard,
+    h("button",{class:"btn",style:"margin-top:22px",onClick:next},["Weiter zu Steuern & Chancen"]),
+    h("button",{class:"back",onClick:prev},["Zurück"])
+  ]);
+  setTimeout(()=>{
+    const C=2*Math.PI*78, pct=clamp(c.total/500,0,1);
+    const fg=document.getElementById("ringfg");
+    if(fg){ fg.setAttribute("stroke-dasharray",C); fg.setAttribute("stroke-dashoffset",C); fg.style.transition="stroke-dashoffset 1.1s cubic-bezier(.2,.8,.2,1)"; requestAnimationFrame(()=>fg.setAttribute("stroke-dashoffset",C*(1-pct))); }
+    const numEl=document.getElementById("ringnum");
+    let start=null; const dur=1100;
+    const tick=t=>{ if(!start)start=t; const p=clamp((t-start)/dur,0,1); const e=1-Math.pow(1-p,3); if(numEl) numEl.textContent=Math.round(c.total*e); if(p<1) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  },30);
+  return screen;
+}
+
+function screenLead(){
+  const nameI=h("input",{type:"text",placeholder:"Dein Vorname"}); nameI.value=state.lead.name;
+  const mailI=h("input",{type:"email",placeholder:"E-Mail-Adresse"}); mailI.value=state.lead.email;
+  const telI=h("input",{type:"tel",placeholder:"Telefonnummer"}); telI.value=state.lead.tel;
+  const check=h("input",{type:"checkbox",style:"margin-top:3px"}); check.checked=state.lead.einw;
+  const submit=h("button",{class:"btn",style:"margin-top:16px"},["Auswertung jetzt erstellen"]);
+  const validate=()=>{ submit.disabled=!(nameI.value.trim()&&mailI.value.trim()&&telI.value.trim()&&check.checked); };
+  [nameI,mailI,telI].forEach(i=>i.addEventListener("input",()=>{ state.lead.name=nameI.value; state.lead.email=mailI.value; state.lead.tel=telI.value; validate(); }));
+  check.addEventListener("change",()=>{ state.lead.einw=check.checked; validate(); });
+  submit.addEventListener("click",async()=>{
+    submit.disabled=true; submit.textContent="Wird erstellt…";
+    await submitToSchnittstelle({ lead:state.lead, profil:state, scores:calc().scores, total:calc().total, finanztyp:calc().finanztyp });
+    next();
+  });
+  validate();
+  return h("div",{class:"screen"},[
+    h("div",{class:"eyebrow"},["Fast geschafft"]),
+    h("h2",{style:"font-size:26px"},["Deine KI-Auswertung freischalten"]),
+    h("p",{class:"lead"},["Wir erstellen deine persönliche Auswertung und melden uns mit deinen Ergebnissen."]),
+    h("div",{class:"card"},[
+      h("div",{class:"field",style:"margin:0 0 12px"},[nameI]),
+      h("div",{class:"field",style:"margin:0 0 12px"},[mailI]),
+      h("div",{class:"field",style:"margin:0 0 14px"},[telI]),
+      h("label",{class:"chip",style:"display:flex;gap:10px;align-items:flex-start;cursor:pointer"},[
+        check, h("span",{style:"font-size:12.5px;color:var(--muted)"},["Ich möchte meine Auswertung erhalten und bin mit der Verarbeitung meiner Angaben gemäß Datenschutzerklärung einverstanden."])
+      ])
+    ]),
+    submit,
+    h("p",{class:"foot"},["Die echte Datenübergabe an euer System binden die Entwickler an dieser Stelle an."]),
+    h("button",{class:"back",onClick:prev},["Zurück"])
+  ]);
+}
+
+function screenKi(){
+  const loadTxt="Deine persönliche Expertise wird erstellt…";
+  const body = state.kiLoading
+    ? h("p",{style:"color:var(--txt)"},[ h("span",{class:"spin"}), loadTxt ])
+    : h("div",{class:"ki"},[state.kiText]);
+  const kids=[
+    blockNav("ki"),
+    h("div",{class:"eyebrow"},["Persönlich für "+(state.lead.name||"dich")+(state.dnaNummer?" · FinanzDNA #"+state.dnaNummer:"")]),
+    h("h2",{style:"font-size:26px"},["Deine KI-Expertise"]),
+    h("p",{class:"lead"},["Deine Zusammenfassung auf Basis deiner Angaben – zum Ausdrucken und Speichern."]),
+    h("div",{class:"card"},[body])
+  ];
+  if(!state.kiLoading){
+    const beratChk=h("input",{type:"checkbox",style:"width:18px;height:18px;accent-color:var(--cloud);cursor:pointer;flex:0 0 auto;margin-top:1px"});
+    beratChk.checked=state.beratungUnlocked;
+    beratChk.addEventListener("change",()=>{ state.beratungUnlocked=beratChk.checked; render(); });
+    kids.push(h("label",{class:"card",style:"display:flex;align-items:flex-start;gap:11px;cursor:pointer;margin-top:4px;border:1px solid "+(state.beratungUnlocked?"var(--cloud)":"var(--line)")+";background:"+(state.beratungUnlocked?"rgba(46,155,240,.08)":"rgba(255,255,255,.03)")},[
+      beratChk,
+      h("div",null,[
+        h("div",{style:"font-size:13.5px;font-weight:700;color:#eaf1fb"},["Beratungsfreigabe erteilen"]),
+        h("div",{style:"font-size:12.5px;color:var(--muted);line-height:1.45;margin-top:3px"},["Ich möchte zu meiner Expertise persönlich beraten werden. Das schaltet die Detail-Auswertungen auf den einzelnen Leveln frei."])
+      ])
+    ]));
+    const printBtn=h("button",{class:"mini",style:"flex:1"},["🖨️ Als PDF drucken"]);
+    printBtn.addEventListener("click",printExpertise);
+    const saveBtn=h("button",{class:"mini",style:"flex:1"},["💾 Auf PC speichern"]);
+    saveBtn.addEventListener("click",saveToPC);
+    kids.push(h("div",{style:"display:flex;gap:10px;margin-top:16px"},[printBtn,saveBtn]));
+    kids.push(h("button",{class:"btn gold",style:"margin-top:10px",onClick:()=>{ resetForReplay(); go("intro"); }},["Fertig – neuen Kunden starten"]));
+  }
+  kids.push(h("p",{class:"foot"},["Der Ausdruck enthält alles: Auswertung, Angaben, Termin, Referenzen und Feedback. Speichern legt eine Datei auf deinem PC ab (heute erfassen, später wieder laden). Die echte CRM-Anlage übernimmt euer Backend."]));
+  kids.push(h("button",{class:"back",onClick:prev},["Zurück"]));
+  return h("div",{class:"screen"},kids);
+}
+
+function nameCard(){
+  const wrap=h("div",{class:"card"});
+  wrap.appendChild(h("div",{class:"sublabel"},["Für deine persönliche Expertise"]));
+  wrap.appendChild(h("p",{style:"font-size:12.5px;color:var(--muted);margin:-2px 0 10px"},["Dein Name – damit die Auswertung dir zugeordnet wird. Eine zweite Person kannst du bei Bedarf ergänzen."]));
+  const mk=(ph,key)=>{ const inp=h("input",{type:"text",placeholder:ph,value:state.lead[key]||"",style:"width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.16);border-radius:10px;padding:10px 12px;color:#eaf1fb;font-size:13.5px;outline:none;margin-bottom:9px"}); inp.addEventListener("input",()=>{ state.lead[key]=inp.value; }); return inp; };
+  wrap.appendChild(mk("Vor- und Nachname","name"));
+  const showSecond = state.zweitPerson || String(state.lead.name2||"").trim();
+  if(showSecond){
+    wrap.appendChild(mk("Name 2. Person (optional)","name2"));
+    const rm=h("span",{style:"cursor:pointer;color:var(--muted);font-size:12px"},["– zweite Person entfernen"]);
+    rm.addEventListener("click",()=>{ state.zweitPerson=false; state.lead.name2=""; renderScreenKeepStep(); });
+    wrap.appendChild(rm);
+  } else {
+    const add=h("span",{style:"cursor:pointer;color:var(--cloud);font-size:12.5px;font-weight:600"},["+ zweite Person hinzufügen"]);
+    add.addEventListener("click",()=>{ state.zweitPerson=true; renderScreenKeepStep(); });
+    wrap.appendChild(add);
+  }
+  return wrap;
+}
+function nameComplete(){ return !!String(state.lead.name||"").trim(); }
+function nameToast(){ toast("Bitte deinen Namen eintragen"); }
+
+function screenCloud(){
+  if(state.partner && state.partner.url) return screenCloudPartner();
+  // Nutzen + Startguthaben
+  const card=h("div",{class:"card"});
+  ["Alle Verträge digital an einem Ort","Ergebnisse & Fortschritt dauerhaft gespeichert","Von der KI ausgewertet – Leistungen & Sparpotenzial","Deine Beratung optimal vorbereitet"]
+    .forEach(t=>card.appendChild(h("div",{class:"row"},[ h("span",{class:"rl"},["✓ "+t]) ])));
+  card.appendChild(h("div",{class:"row"},[ h("span",{class:"rl"},["🎁 Startguthaben bei Einrichtung"]), h("span",{class:"ra",style:"color:var(--gold)"},["+"+eur(BONUS_CONFIG.start)]) ]));
+
+  // Unterlagen-Upload
+  const uploadCard=h("div",{class:"card"});
+  uploadCard.appendChild(h("div",{class:"sublabel"},["Deine Unterlagen"]));
+  uploadCard.appendChild(h("div",{style:"font-family:Space Grotesk;font-weight:700;font-size:16px;color:var(--txt)"},["Verträge hinzufügen"]));
+  uploadCard.appendChild(h("p",{style:"font-size:12.5px;color:var(--muted);line-height:1.45;margin:4px 0 12px"},["Fotografieren oder hochladen – die KI liest sie aus, fasst zusammen, was drinsteht, und zeigt, was sich verbessern lässt."]));
+
+  const fileIn=h("input",{type:"file",accept:"image/*,application/pdf",multiple:"true",style:"display:none"});
+  const camIn=h("input",{type:"file",accept:"image/*",capture:"environment",style:"display:none"});
+  const onPick=(inp)=>{ const files=Array.from(inp.files||[]); files.forEach(f=>state.docs.push(f.name)); if(files.length) toast(files.length+" Unterlage(n) hinzugefügt"); renderScreenKeepStep(); };
+  fileIn.addEventListener("change",()=>onPick(fileIn));
+  camIn.addEventListener("change",()=>onPick(camIn));
+
+  const upBtn=h("button",{class:"mini",style:"flex:1"},["📄 Hochladen"]);
+  upBtn.addEventListener("click",()=>fileIn.click());
+  const camBtn=h("button",{class:"mini",style:"flex:1"},["📷 Fotografieren"]);
+  camBtn.addEventListener("click",()=>camIn.click());
+  uploadCard.appendChild(h("div",{style:"display:flex;gap:10px"},[upBtn,camBtn]));
+  uploadCard.appendChild(fileIn); uploadCard.appendChild(camIn);
+
+  if(state.docs.length){
+    const list=h("div",{style:"margin-top:12px;display:flex;flex-direction:column;gap:6px"});
+    state.docs.forEach((nm,i)=>{
+      const rm=h("button",{class:"mini",style:"padding:2px 9px"},["✕"]);
+      rm.addEventListener("click",()=>{ state.docs.splice(i,1); renderScreenKeepStep(); });
+      list.appendChild(h("div",{style:"display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12.5px;color:#eaf1fb;background:rgba(255,255,255,.04);border-radius:9px;padding:7px 10px"},[
+        h("span",{html:"📎 "+nm}), rm
+      ]));
+    });
+    uploadCard.appendChild(list);
+  }
+
+  const cta=h("button",{class:"btn gold",style:"margin-top:16px"},[ state.cloudOn?"Weiter":"FinanzCloud einrichten & "+eur(BONUS_CONFIG.start)+" sichern" ]);
+  cta.addEventListener("click",()=>{
+    if(!nameComplete()){ nameToast(); return; }
+    if(!state.cloudOn){ state.cloudOn=true; toast("FinanzCloud eingerichtet · +"+eur(BONUS_CONFIG.start)); }
+    next();
+  });
+
+  const skip=h("button",{class:"back",onClick:()=>{ if(!nameComplete()){ nameToast(); return; } if(!state.cloudOn){ state.cloudOn=true; toast("FinanzCloud eingerichtet · +"+eur(BONUS_CONFIG.start)); } next(); }},["Erst mal ohne Unterlagen fortfahren →"]);
+
+  return h("div",{class:"screen"},[
+    blockNav("cloud"),
+    h("div",{class:"eyebrow"},["Jetzt "+eur(BONUS_CONFIG.start)+" sichern"]),
+    h("h2",{style:"font-size:26px"},["FinanzCloud einrichten"]),
+    h("p",{class:"lead"},["Alle Verträge an einem Ort – von der KI ausgewertet. Richte deine Cloud ein und sichere dir "+eur(BONUS_CONFIG.start)+" Startguthaben."]),
+    nameCard(), card, uploadCard, cta, skip,
+    h("button",{class:"back",onClick:prev},["Zurück"])
+  ]);
+}
+
+const TERMIN_THEMEN=[["Gesamtstrategie","alle Bereiche zusammen"],["Rentenstrategie","Lücke schließen"],["Eigentumsstrategie","Miete in Eigentum wandeln"],["Vermögensstrategie","gezielt aufbauen"],["Familienstrategie","Kinder absichern"]];
+const TERMIN_KANAELE=[["video","🎥 Video"],["vorort","📍 Vor Ort"]];
+const MONATE=["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+const TERMIN_SLOTS=["09:00","11:00","14:00","16:00","18:00"];
+const WD=["So","Mo","Di","Mi","Do","Fr","Sa"];
+const FB_GEFALLEN=["Der klare Überblick über meine Finanzen","Dass ich mein Sparpotenzial gesehen habe","Wie einfach und schnell es ging"];
+const FB_ERWARTUNG=["Klare Umsetzung und konkrete Schritte","Steuern sparen und Vermögen aufbauen","Einen ehrlichen Vergleich meiner Verträge"];
+function fbToggle(key,a){
+  let arr=state.feedback[key]; if(!Array.isArray(arr)) arr=arr?[arr]:[];
+  const i=arr.indexOf(a); if(i>=0) arr.splice(i,1); else arr.push(a);
+  state.feedback[key]=arr;
+}
+function feedbackCard(){
+  const card=h("div",{class:"card",style:"background:rgba(255,255,255,.03)"});
+  card.appendChild(h("div",{style:"display:flex;align-items:center;justify-content:space-between;gap:10px"},[
+    h("div",{class:"eyebrow",style:"margin:0"},["Dein Feedback"]),
+    h("span",{style:"font-size:11px;color:var(--muted);background:rgba(255,255,255,.05);border-radius:20px;padding:3px 10px"},["Mehrfachauswahl"])
+  ]));
+  const block=(title,arr,key)=>{
+    const wrap=h("div",{style:"margin-top:13px"});
+    wrap.appendChild(h("div",{style:"font-size:13.5px;font-weight:600;color:#eaf1fb;margin-bottom:9px"},[title]));
+    const opts=h("div",{style:"display:flex;flex-direction:column;gap:8px"});
+    arr.forEach(a=>{
+      const cur=Array.isArray(state.feedback[key])?state.feedback[key]:(state.feedback[key]?[state.feedback[key]]:[]);
+      const sel=cur.indexOf(a)>=0;
+      const box=h("span",{style:"flex:0 0 auto;width:21px;height:21px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;border:1.5px solid "+(sel?"var(--cloud)":"var(--line)")+";background:"+(sel?"var(--cloud)":"transparent")+";color:#04122a"},[sel?"✓":""]);
+      const row=h("div",{style:"cursor:pointer;display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:12px;line-height:1.35;font-size:13px;border:1px solid "+(sel?"var(--cloud)":"var(--line)")+";background:"+(sel?"rgba(46,155,240,.10)":"rgba(255,255,255,.02)")+";color:"+(sel?"#eaf1fb":"var(--txt)")},[ box, h("span",{style:"flex:1"},[a]) ]);
+      row.addEventListener("click",()=>{ fbToggle(key,a); renderScreenKeepStep(); });
+      opts.appendChild(row);
+    });
+    wrap.appendChild(opts);
+    return wrap;
+  };
+  card.appendChild(block("Was hat dir heute am besten gefallen?",FB_GEFALLEN,"gefallen"));
+  card.appendChild(block("Was erwartest du vom nächsten Termin?",FB_ERWARTUNG,"erwartung"));
+  return card;
+}
+function naechsteTermine(count){
+  const out=[], d=new Date(); d.setHours(0,0,0,0);
+  while(out.length<count){ d.setDate(d.getDate()+1); const w=d.getDay(); if(w!==0&&w!==6) out.push(new Date(d)); }
+  return out;
+}
+function fmtDatum(d){ return WD[d.getDay()]+" "+d.getDate()+"."+(d.getMonth()+1)+"."; }
+function kanalLabel(v){ const f=TERMIN_KANAELE.find(k=>k[0]===v); return f?f[1]:"–"; }
+
+function screenTermin(){
+  const t=state.termin;
+
+  if(t.bestaetigt){
+    const cr=(k,v)=>h("div",{class:"row"},[ h("span",{class:"rl",style:"color:var(--muted)"},[k]), h("span",{class:"ra"},[v]) ]);
+    return h("div",{class:"screen"},[
+      blockNav("termin"),
+      h("div",{class:"eyebrow"},[t.offen?"Notiert ✓":"Termin angefragt ✓"]),
+      h("h2",{style:"font-size:26px"},["Fast geschafft"+(state.lead.name?", "+state.lead.name:"")+"!"]),
+      h("p",{class:"lead"},[t.offen?"Wir melden uns telefonisch zur Rücksprache und finden gemeinsam einen passenden Termin.":"Wir bestätigen deinen Wunschtermin in Kürze per E-Mail und Telefon."]),
+      h("div",{class:"card"}, t.offen ? [
+        cr("Terminwunsch", "Offen – telefonische Rücksprache"),
+        t.thema?cr("Thema", t.thema):h("span"),
+        cr("Kontakt", (state.lead.name||"–")+(state.lead.tel?" · "+state.lead.tel:""))
+      ] : [
+        cr("Thema", t.thema),
+        cr("Kanal", kanalLabel(t.kanal)),
+        cr("Wunschtermin", t.datum+" · "+t.slot+" Uhr"),
+        cr("Kontakt", (state.lead.name||"–")+(state.lead.tel?" · "+state.lead.tel:""))
+      ]),
+      h("button",{class:"btn",style:"margin-top:16px",onClick:next},["Weiter zur Expertise"]),
+      h("button",{class:"back",onClick:()=>{ t.bestaetigt=false; t.offen=false; renderScreenKeepStep(); }},["Termin ändern"]),
+      h("p",{class:"foot"},["Die echte Termin-/Kalenderbuchung binden die Entwickler hier an (z. B. Slot-Reservierung im CRM)."])
+    ]);
+  }
+
+  // ===== Auswahl =====
+  const today=new Date(); today.setHours(0,0,0,0);
+  if(t.viewY==null){ t.viewY=today.getFullYear(); t.viewM=today.getMonth(); }
+
+  const confirm=h("button",{class:"btn gold",style:"margin-top:18px"},["Termin anfragen"]);
+  const hint=h("p",{style:"text-align:center;font-size:12px;color:var(--muted);margin-top:8px"});
+  const updateHint=()=>{ const fehlt=[]; if(!t.thema)fehlt.push("Thema"); if(!t.kanal)fehlt.push("Kanal"); if(!t.dateKey)fehlt.push("Tag"); if(!t.slot)fehlt.push("Uhrzeit"); hint.textContent=fehlt.length?("Bitte noch wählen: "+fehlt.join(", ")):""; };
+
+  // Inhalt: Thema
+  const themaWrap=h("div",{style:"display:flex;flex-direction:column;gap:8px"});
+  TERMIN_THEMEN.forEach(([title,sub])=>{
+    const on=t.thema===title;
+    const row=h("div",{style:"cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 13px;border-radius:11px;border:1px solid "+(on?"var(--cloud)":"var(--line)")+";background:"+(on?"rgba(46,155,240,.12)":"rgba(255,255,255,.02)")},[
+      h("span",{class:"rl",html:'<b style="font-family:Space Grotesk">'+title+'</b><br><span style="color:var(--muted);font-size:12.5px">'+sub+'</span>'}),
+      h("span",{style:"color:var(--cloud);font-weight:700"},[on?"✓":"›"])
+    ]);
+    row.addEventListener("click",()=>{ t.thema=title; t.acc="kanal"; updateHint(); renderScreenKeepStep(); });
+    themaWrap.appendChild(row);
+  });
+
+  // Inhalt: Kanal
+  const chip=on=>"cursor:pointer;padding:9px 14px;border-radius:10px;font-size:13px;border:1px solid "+(on?"var(--cloud)":"var(--line)")+";background:"+(on?"rgba(46,155,240,.12)":"transparent")+";color:"+(on?"var(--cloud)":"var(--txt)")+";font-weight:"+(on?"700":"500");
+  const kanalWrap=h("div",{style:"display:flex;gap:10px"});
+  TERMIN_KANAELE.forEach(([v,label])=>{
+    const b=h("button",{style:chip(t.kanal===v)+";flex:1"},[label]);
+    b.addEventListener("click",()=>{ t.kanal=v; t.acc="tag"; updateHint(); renderScreenKeepStep(); });
+    kanalWrap.appendChild(b);
+  });
+
+  // Inhalt: Tag & Uhrzeit
+  const isCurMonth=(t.viewY===today.getFullYear()&&t.viewM===today.getMonth());
+  const navBtn=(label,dis,fn)=>{ const b=h("button",{style:"background:none;border:1px solid var(--line);border-radius:9px;color:"+(dis?"#3a4a66":"var(--cloud)")+";width:34px;height:34px;font-size:16px;cursor:"+(dis?"default":"pointer")},[label]); if(!dis) b.addEventListener("click",fn); return b; };
+  const calHead=h("div",{style:"display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"},[
+    navBtn("‹",isCurMonth,()=>{ t.viewM--; if(t.viewM<0){t.viewM=11;t.viewY--;} renderScreenKeepStep(); }),
+    h("div",{style:"font-family:Space Grotesk;font-weight:700;font-size:15px;color:var(--txt)"},[MONATE[t.viewM]+" "+t.viewY]),
+    navBtn("›",false,()=>{ t.viewM++; if(t.viewM>11){t.viewM=0;t.viewY++;} renderScreenKeepStep(); })
+  ]);
+  const grid=h("div",{style:"display:grid;grid-template-columns:repeat(7,1fr);gap:4px"});
+  ["Mo","Di","Mi","Do","Fr","Sa","So"].forEach(d=>grid.appendChild(h("div",{style:"text-align:center;font-size:11px;color:var(--muted);padding-bottom:4px"},[d])));
+  const firstW=(new Date(t.viewY,t.viewM,1).getDay()+6)%7;
+  const dim=new Date(t.viewY,t.viewM+1,0).getDate();
+  for(let i=0;i<firstW;i++) grid.appendChild(h("div"));
+  const dayStyle=(dis,sel)=>"text-align:center;padding:9px 0;border-radius:9px;font-size:13px;"+(sel?"background:var(--cloud);color:#04122a;font-weight:700;":dis?"color:#3a4a66;":"color:#eaf1fb;cursor:pointer;border:1px solid var(--line);");
+  for(let day=1;day<=dim;day++){
+    const date=new Date(t.viewY,t.viewM,day); date.setHours(0,0,0,0);
+    const w=date.getDay(), dis=(date<today)||(w===0||w===6), key=t.viewY+"-"+t.viewM+"-"+day, seld=t.dateKey===key;
+    const cell=h("div",{style:dayStyle(dis,seld)},[String(day)]);
+    if(!dis) cell.addEventListener("click",()=>{ t.dateKey=key; t.datum=fmtDatum(date); updateHint(); renderScreenKeepStep(); });
+    grid.appendChild(cell);
+  }
+  const tagInner=h("div");
+  tagInner.appendChild(h("div",{class:"card"},[calHead,grid]));
+  if(t.dateKey){
+    const slotWrap=h("div",{style:"display:flex;flex-wrap:wrap;gap:8px;margin-top:6px"});
+    TERMIN_SLOTS.forEach(s=>{
+      const b=h("button",{style:chip(t.slot===s)},[s+" Uhr"]);
+      b.addEventListener("click",()=>{ t.slot=s; updateHint(); renderScreenKeepStep(); });
+      slotWrap.appendChild(b);
+    });
+    tagInner.appendChild(h("div",{class:"sublabel",style:"margin-top:14px"},["Um wie viel Uhr?"]));
+    tagInner.appendChild(slotWrap);
+    const ti=h("input",{type:"time",value:(t.slot||""),style:"background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);border-radius:10px;padding:8px 11px;color:#eaf1fb;font-size:14px;color-scheme:dark"});
+    const timeEcho=h("span",{style:"font-size:12.5px;color:var(--cloud);font-weight:600"}); if(t.slot) timeEcho.textContent="✓ "+t.slot+" Uhr";
+    const setTime=()=>{ if(ti.value){ t.slot=ti.value; timeEcho.textContent="✓ "+ti.value+" Uhr"; updateHint(); } };
+    ti.addEventListener("input",setTime); ti.addEventListener("change",setTime);
+    tagInner.appendChild(h("div",{style:"display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap"},[ h("span",{style:"font-size:12.5px;color:var(--muted)"},["oder eigene Uhrzeit:"]), ti, timeEcho ]));
+  } else {
+    tagInner.appendChild(h("p",{style:"font-size:12.5px;color:var(--muted);margin-top:10px"},["Wähl einen Tag, dann erscheinen die Uhrzeiten."]));
+  }
+
+  // Akkordeon
+  if(!t.acc) t.acc="thema";
+  const acc=(num,label,val,sec,content)=>{
+    const open=t.acc===sec;
+    const head=h("div",{style:"cursor:pointer;display:flex;align-items:center;gap:11px;padding:13px 14px;border-radius:12px;border:1px solid "+(open?"var(--cloud)":"var(--line)")+";background:"+(open?"rgba(46,155,240,.08)":"rgba(255,255,255,.02)")},[
+      h("span",{style:"flex:0 0 auto;width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:"+(val?"var(--cloud)":"var(--line)")+";color:"+(val?"#04122a":"var(--muted)")},[val?"✓":String(num)]),
+      h("div",{style:"flex:1;min-width:0"},[
+        h("div",{style:"font-size:13.5px;font-weight:600;color:#eaf1fb"},[label]),
+        h("div",{style:"font-size:12px;color:"+(val?"var(--cloud)":"var(--muted)")+";margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"},[val||"Auswählen"])
+      ]),
+      h("span",{style:"color:var(--muted);font-size:11px;flex:0 0 auto"},[open?"▲":"▼"])
+    ]);
+    head.addEventListener("click",()=>{ t.acc=open?null:sec; renderScreenKeepStep(); });
+    const kids=[head];
+    if(open) kids.push(h("div",{style:"padding:12px 2px 2px"},[content]));
+    return h("div",{style:"margin-bottom:10px"},kids);
+  };
+
+  updateHint();
+  confirm.addEventListener("click",()=>{
+    if(!(t.thema&&t.kanal&&t.dateKey&&t.slot)){ updateHint(); toast("Bitte Auswahl vervollständigen"); return; }
+    t.offen=false; t.bestaetigt=true; toast("Terminwunsch gesendet"); render(); window.scrollTo({top:0,behavior:"smooth"});
+  });
+  const offen=h("button",{class:"btn ghost",style:"margin-top:10px"},["Noch offen lassen – telefonische Rücksprache"]);
+  offen.addEventListener("click",()=>{ t.offen=true; t.bestaetigt=true; toast("Notiert – wir melden uns telefonisch"); render(); window.scrollTo({top:0,behavior:"smooth"}); });
+
+  return h("div",{class:"screen"},[
+    blockNav("termin"),
+    h("div",{class:"eyebrow"},["Kostenlos & unverbindlich"]),
+    h("h2",{style:"font-size:26px"},["Strategie-Termin buchen"]),
+    h("p",{class:"lead"},["Gib uns kurz dein Feedback und wähl deinen Wunschtermin – oder lass es offen, wir melden uns telefonisch."]),
+    feedbackCard(),
+    h("div",{class:"sublabel",style:"margin-top:6px"},["Dein Wunschtermin"]),
+    acc(1,"Welche Lücke zuerst?",(t.thema||""),"thema",themaWrap),
+    acc(2,"Wie möchtest du sprechen?",(t.kanal?kanalLabel(t.kanal):""),"kanal",kanalWrap),
+    acc(3,"Tag & Uhrzeit",(t.datum?(t.datum+(t.slot?" · "+t.slot+" Uhr":"")):""),"tag",tagInner),
+    confirm,
+    hint,
+    offen,
+    h("button",{class:"back",onClick:prev},["Zurück"])
+  ]);
+}
+
+function screenEmpfehlung(){
+  const rb=referralBonus();
+  const fillPct=Math.min(100, rb/BONUS_CONFIG.maxBonus*100);
+  const maxedInvites=state.invites>=BONUS_CONFIG.maxInvites;
+
+  // Staffel-Kästchen
+  const pills=h("div",{style:"display:flex;gap:8px;margin-top:14px"}, BONUS_CONFIG.tiers.map(t=>{
+    const reached=state.cloudOn && state.invites>=t.n;
+    return h("div",{style:"flex:1;border-radius:14px;padding:13px 6px;text-align:center;border:1.5px solid "+(reached?"var(--gold)":"var(--line)")+";background:"+(reached?"rgba(246,180,60,.14)":"rgba(255,255,255,.03)")},[
+      h("div",{style:"font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:"+(reached?"var(--gold)":"var(--muted)")+";margin-bottom:5px"},[t.n+(t.n===1?" Referenz":" Referenzen")]),
+      h("div",{style:"font-family:Space Grotesk;font-weight:700;font-size:22px;line-height:1;color:"+(reached?"var(--gold)":"var(--txt)")},[eur(t.amount)])
+    ]);
+  }));
+
+  const bonusCard=h("div",{class:"card",style:"text-align:center"},[
+    h("div",{class:"bonusval num"},[eur(rb)]),
+    h("div",{style:"color:var(--muted);font-size:13px;margin-bottom:6px"},["Dein Referenz-Bonus – echtes Geld"]),
+    h("div",{class:"bonusbar"},[ h("div",{class:"bonusfill",style:"width:"+fillPct+"%"}) ]),
+    pills,
+    h("div",{style:"margin-top:12px;font-family:Space Grotesk;font-weight:600;font-size:13.5px;color:var(--gold)"},[nextTierText()])
+  ]);
+  if(state.cloudOn) bonusCard.appendChild(h("div",{style:"margin-top:10px;font-size:12px;color:var(--muted)"},["Plus dein Startguthaben von "+eur(BONUS_CONFIG.start)+" – bereits gesichert."]));
+
+  // Schritt 1: FinanzCloud (i.d.R. schon eingerichtet)
+  let startCard=null;
+  if(!state.cloudOn){
+    const cb=h("button",{class:"btn gold",style:"margin-top:10px"},["FinanzCloud einrichten & "+eur(BONUS_CONFIG.start)+" sichern"]);
+    cb.addEventListener("click",()=>{ state.cloudOn=true; toast("FinanzCloud eingerichtet · "+eur(BONUS_CONFIG.start)+" freigeschaltet"); renderScreenKeepStep(); });
+    startCard=h("div",{class:"card"},[
+      h("div",{class:"sublabel"},["Schritt 1"]),
+      h("div",{style:"font-family:Space Grotesk;font-weight:700;font-size:16px;color:var(--txt)"},["FinanzCloud einrichten"]),
+      h("div",{class:"row"},[ h("span",{class:"rl",style:"font-size:13px;color:var(--muted)"},["Du erhältst sofort einen "+eur(BONUS_CONFIG.start)+" Gutschein."]) ]),
+      cb
+    ]);
+  } else {
+    startCard=h("div",{class:"card"},[
+      h("div",{class:"sublabel"},["Schritt 1 · erledigt"]),
+      h("div",{class:"row"},[ h("span",{class:"rl"},["✓ FinanzCloud eingerichtet"]), h("span",{class:"ra",style:"color:var(--gold)"},["+"+eur(BONUS_CONFIG.start)]) ])
+    ]);
+  }
+
+  // Schritt 2: Referenzen eintragen (Name + optional Kontakt, bis zu max)
+  const inviteCard=h("div",{class:"card"});
+  inviteCard.appendChild(h("div",{class:"sublabel"},["Schritt 2"]));
+  inviteCard.appendChild(h("div",{style:"font-family:Space Grotesk;font-weight:700;font-size:16px;color:var(--txt)"},["Referenzen eintragen"]));
+  inviteCard.appendChild(h("p",{style:"font-size:13px;color:var(--muted);line-height:1.4;margin:4px 0 12px"},["Familie, Freunde oder Kollegen – bis zu "+BONUS_CONFIG.maxInvites+". Jede:r erhält selbst "+eur(BONUS_CONFIG.friendGets)+" Startguthaben. Name genügt, Kontakt ist optional."]));
+
+  if(state.referenzen.length){
+    const list=h("div",{style:"display:flex;flex-direction:column;gap:7px;margin-bottom:12px"});
+    state.referenzen.forEach((r,i)=>{
+      const rm=h("button",{class:"mini",style:"padding:2px 9px;flex:none"},["✕"]);
+      rm.addEventListener("click",()=>{ state.referenzen.splice(i,1); state.invites=state.referenzen.length; renderScreenKeepStep(); });
+      const sub=[r.email,r.tel].filter(Boolean).join(" · ");
+      list.appendChild(h("div",{style:"display:flex;justify-content:space-between;align-items:center;gap:8px;background:rgba(255,255,255,.04);border-radius:10px;padding:8px 11px"},[
+        h("div",null,[ h("div",{style:"font-size:13.5px;color:#eaf1fb;font-weight:600"},[r.name]), sub?h("div",{style:"font-size:11.5px;color:var(--muted);margin-top:1px"},[sub]):h("span") ]),
+        rm
+      ]));
+    });
+    inviteCard.appendChild(list);
+  }
+
+  if(state.referenzen.length<BONUS_CONFIG.maxInvites){
+    const mk=(ph,type)=>h("input",{type:type||"text",placeholder:ph,style:"width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.16);border-radius:10px;padding:9px 11px;color:#eaf1fb;font-size:13px;outline:none;margin-bottom:8px"});
+    const nIn=mk("Name *"), eIn=mk("E-Mail (optional)","email"), tIn=mk("Telefon (optional)","tel");
+    const addBtn=h("button",{class:"btn",style:"margin-top:2px"},["+ Referenz hinzufügen"]);
+    addBtn.addEventListener("click",()=>{
+      const nm=nIn.value.trim(); if(!nm){ toast("Bitte einen Namen eintragen"); return; }
+      if(state.referenzen.length>=BONUS_CONFIG.maxInvites){ toast("Maximal "+BONUS_CONFIG.maxInvites+" Referenzen"); return; }
+      state.referenzen.push({ name:nm, email:eIn.value.trim(), tel:tIn.value.trim() });
+      state.invites=state.referenzen.length;
+      toast("Referenz erfasst · Bonus jetzt "+eur(referralBonus()));
+      renderScreenKeepStep();
+    });
+    inviteCard.appendChild(nIn); inviteCard.appendChild(eIn); inviteCard.appendChild(tIn); inviteCard.appendChild(addBtn);
+  } else {
+    inviteCard.appendChild(h("div",{style:"font-size:12.5px;color:var(--gold);text-align:center;margin:2px 0 4px"},["Maximum von "+BONUS_CONFIG.maxInvites+" Referenzen erreicht 🎉"]));
+  }
+
+  const shareBtn=h("button",{class:"btn ghost",style:"margin-top:10px"},["Einladung teilen"]);
+  shareBtn.addEventListener("click",async()=>{
+    const txt="Ich nutze Meine FinanzCloud – richte sie ein und sichere dir "+eur(BONUS_CONFIG.friendGets)+" Startguthaben.";
+    try{ if(navigator.share){ await navigator.share({title:"Meine FinanzCloud",text:txt}); } else { toast("Einladungslink kopiert"); } }catch(e){ toast("Einladungslink kopiert"); }
+  });
+  inviteCard.appendChild(shareBtn);
+
+  // Schritt 3: eigene Sofort-Boni
+  const actionCard=h("div",{class:"card"});
+  actionCard.appendChild(h("div",{class:"sublabel"},["Schritt 3"]));
+  actionCard.appendChild(h("div",{style:"font-family:Space Grotesk;font-weight:700;font-size:16px;color:var(--txt)"},["Eigene Sofort-Boni"]));
+  actionCard.appendChild(h("div",{class:"row"},[ h("span",{class:"rl",style:"font-size:12.5px;color:var(--muted)"},["Zusätzlich – sofort ausgezahlt."]) ]));
+  BONUS_CONFIG.actions.forEach(a=>{
+    const done=!!state.actionsDone[a.id];
+    const labelBlock=h("span",{class:"rl",html:a.label+' <span style="color:var(--gold);font-weight:700;font-family:Space Grotesk">+'+eur(a.amount)+'</span>'});
+    let right;
+    if(done){
+      right=h("button",{class:"mini done"},["✓ erledigt"]);
+    } else if(a.url){
+      right=h("button",{class:"mini"},["Vergleich starten →"]);
+      right.addEventListener("click",()=>{ window.open(a.url,"_blank","noopener,noreferrer"); state.actionsDone[a.id]=true; toast("Vergleich geöffnet · +"+eur(a.amount)+" bei Abschluss"); setTimeout(()=>renderScreenKeepStep(),0); });
+    } else {
+      right=h("button",{class:"mini"},["Vergleich starten →"]);
+      right.addEventListener("click",()=>{ state.actionsDone[a.id]=true; toast("+"+eur(a.amount)+" bei Abschluss"); renderScreenKeepStep(); });
+    }
+    actionCard.appendChild(h("div",{class:"row"},[ labelBlock, right ]));
+  });
+
+  // Weitergeben-Hinweis (einstufig)
+  const passCard=h("div",{class:"card",style:"border-color:rgba(63,224,199,.3)"},[
+    h("div",{style:"font-family:Space Grotesk;font-weight:700;font-size:14px;color:var(--pulse);margin-bottom:4px"},["Und das Beste: weitergeben"]),
+    h("p",{style:"font-size:12.5px;color:#cdd9ee;line-height:1.45;margin:0"},["Deine Eingeladenen bekommen genau dasselbe Angebot und können selbst Menschen einladen – jede:r sammelt den eigenen Bonus. So gibst du den Vorteil einfach weiter."])
+  ]);
+
+  // Gesamt-Summe (alles zusammengezählt)
+  const gesamt=(state.cloudOn?BONUS_CONFIG.start:0)+selfBonus()+referralBonus();
+  const trow=(label,val)=>h("div",{class:"row"},[
+    h("span",{class:"rl",style:"font-size:13px;color:var(--muted)"},[label]),
+    h("span",{class:"ra"},[eur(val)])
+  ]);
+  const totalCard=h("div",{class:"card",style:"border-color:rgba(246,180,60,.4);background:rgba(246,180,60,.06)"},[
+    h("div",{class:"sublabel",style:"color:var(--gold)"},["Gesamt gesichert"]),
+    trow("Startguthaben", state.cloudOn?BONUS_CONFIG.start:0),
+    trow("Sofort-Boni", selfBonus()),
+    trow("Referenz-Bonus", referralBonus()),
+    h("div",{style:"display:flex;justify-content:space-between;align-items:center;border-top:1px solid rgba(246,180,60,.3);margin-top:8px;padding-top:11px"},[
+      h("span",{style:"font-family:Space Grotesk;font-weight:700;font-size:15px;color:var(--txt)"},["Gesamt"]),
+      h("span",{style:"font-family:Space Grotesk;font-weight:700;font-size:25px;color:var(--gold)"},[eur(gesamt)])
+    ])
+  ]);
+
+  const kids=[
+    blockNav("empfehlung"),
+    h("div",{class:"eyebrow"},["Referenzen lohnen sich"]),
+    h("h2",{style:"font-size:26px"},["Bis zu "+eur(BONUS_CONFIG.maxBonus)+" sichern"]),
+    h("p",{class:"lead"},["1 Referenz "+eur(50)+", 3 Referenzen "+eur(250)+", 5 Referenzen "+eur(500)+" – und jede:r Eingeladene erhält selbst "+eur(BONUS_CONFIG.friendGets)+" Startguthaben."]),
+    bonusCard,
+    startCard,
+    inviteCard,
+    actionCard,
+    totalCard,
+    passCard,
+    h("button",{class:"btn",style:"margin-top:18px",onClick:next},["Weiter zur Terminabstimmung"]),
+    h("button",{class:"back",onClick:prev},["Zurück"]),
+    h("p",{class:"foot"},["Einstufig: Du verdienst nur an deinen eigenen direkten Referenzen, nicht an deren Referenzen. Beträge zentral konfigurierbar. Geldprämien fürs Empfehlen im Finanzvertrieb bitte vor dem Livegang durch eure Compliance/Recht prüfen lassen."])
+  ];
+  return h("div",{class:"screen"},kids);
+}
+
+function resetForReplay(){
+  state.cloudOn=false; state.actionsDone={}; state.invites=0;
+  state.docs=[]; state.docConsent=false;
+  state.dnaNummer=null; state.beratungUnlocked=false; state.levelOpen={};
+  state.referenzen=[]; state.feedback={ gefallen:[], erwartung:[] }; state.zweitPerson=false;
+  state.lead={ name:"", name2:"", email:"", tel:"", einw:false };
+  state.termin={ thema:"", kanal:"", datum:"", slot:"", bestaetigt:false, offen:false };
+  state.ratenkredite=[]; state.mieteinnahme=0; state.sanierungBetrag=0;
+  state.kiText=""; state.kiLoading=false;
+}
+
+/* ===================== RENDER ===================== */
+/* ===== Partner / personalisierte Links ===== */
+function navClip(t){ try{ if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t); } else { const ta=document.createElement("textarea"); ta.value=t; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); } }catch(e){} }
+function partnerEncode(p){ try{ return btoa(unescape(encodeURIComponent(JSON.stringify(p)))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); }catch(e){ return ""; } }
+function partnerDecode(s){ try{ s=String(s).replace(/-/g,"+").replace(/_/g,"/"); return JSON.parse(decodeURIComponent(escape(atob(s)))); }catch(e){ return null; } }
+function partnerLink(p){ return location.origin+location.pathname+"#p="+partnerEncode(p); }
+function loadPartners(){ try{ return JSON.parse(localStorage.getItem("fc_partners")||"[]"); }catch(e){ return []; } }
+function savePartners(arr){ try{ localStorage.setItem("fc_partners",JSON.stringify(arr)); }catch(e){} }
+function initFromUrl(){
+  try{
+    const hsh=location.hash||"", srch=location.search||"";
+    if(/(^|[?&])admin($|[=&])/.test(srch) || /^#admin\b/.test(hsh)){ state.step="admin"; return; }
+    const m=hsh.match(/[#&]p=([^&]+)/);
+    if(m){ const p=partnerDecode(m[1]); if(p&&typeof p==="object") state.partner=p; }
+  }catch(e){}
+}
+
+var adminDraft={name:"",tel:"",email:"",url:"",idx:-1};
+function adminInput(label,key,ph,type){
+  const inp=h("input",{type:type||"text",placeholder:ph||"",value:adminDraft[key]||"",style:"width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.16);border-radius:10px;padding:10px 12px;color:#eaf1fb;font-size:13.5px;outline:none"});
+  inp.addEventListener("input",()=>{ adminDraft[key]=inp.value; });
+  return h("div",{style:"margin-bottom:10px"},[ h("div",{style:"font-size:11.5px;color:var(--muted);margin-bottom:4px"},[label]), inp ]);
+}
+function screenAdmin(){
+  const partners=loadPartners();
+  const card=h("div",{class:"card"});
+  card.appendChild(h("div",{class:"sublabel"},[adminDraft.idx>=0?"Partner bearbeiten":"Neuen Partner anlegen"]));
+  card.appendChild(adminInput("Name","name","Vor- und Nachname"));
+  card.appendChild(adminInput("Telefon","tel","z. B. 0151 …","tel"));
+  card.appendChild(adminInput("E-Mail","email","name@firma.de","email"));
+  card.appendChild(adminInput("Upload-Link (zu eurer Datenbank)","url","https://…"));
+  const saveBtn=h("button",{class:"btn",style:"margin-top:4px"},[adminDraft.idx>=0?"Änderungen speichern":"Partner hinzufügen"]);
+  saveBtn.addEventListener("click",()=>{
+    if(!String(adminDraft.name).trim()){ toast("Bitte einen Namen eingeben"); return; }
+    const p={ name:String(adminDraft.name).trim(), tel:String(adminDraft.tel).trim(), email:String(adminDraft.email).trim(), url:String(adminDraft.url).trim() };
+    const list=loadPartners();
+    if(adminDraft.idx>=0) list[adminDraft.idx]=p; else list.push(p);
+    savePartners(list);
+    adminDraft={name:"",tel:"",email:"",url:"",idx:-1};
+    toast("Gespeichert");
+    render();
+  });
+  card.appendChild(saveBtn);
+  if(adminDraft.idx>=0){
+    const cancel=h("button",{class:"back"},["Abbrechen"]);
+    cancel.addEventListener("click",()=>{ adminDraft={name:"",tel:"",email:"",url:"",idx:-1}; render(); });
+    card.appendChild(cancel);
+  }
+
+  const listCard=h("div",{class:"card"});
+  listCard.appendChild(h("div",{class:"sublabel"},["Angelegte Partner ("+partners.length+")"]));
+  if(!partners.length) listCard.appendChild(h("p",{style:"font-size:12.5px;color:var(--muted)"},["Noch keine Partner. Lege oben den ersten an."]));
+  partners.forEach((p,i)=>{
+    const link=partnerLink(p);
+    const copyBtn=h("button",{class:"mini"},["Link kopieren"]);
+    copyBtn.addEventListener("click",()=>{ navClip(link); toast("Personalisierter Link kopiert"); });
+    const openBtn=h("button",{class:"mini"},["Vorschau"]);
+    openBtn.addEventListener("click",()=>{ window.open(link,"_blank","noopener"); });
+    const editBtn=h("button",{class:"mini"},["Bearbeiten"]);
+    editBtn.addEventListener("click",()=>{ adminDraft={name:p.name||"",tel:p.tel||"",email:p.email||"",url:p.url||"",idx:i}; try{window.scrollTo({top:0});}catch(e){} render(); });
+    const delBtn=h("button",{class:"mini"},["Löschen"]);
+    delBtn.addEventListener("click",()=>{ const l=loadPartners(); l.splice(i,1); savePartners(l); toast("Gelöscht"); render(); });
+    listCard.appendChild(h("div",{style:"border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-top:10px"},[
+      h("div",{style:"font-weight:700;color:#eaf1fb;font-size:14px"},[p.name||"(ohne Name)"]),
+      h("div",{style:"font-size:12px;color:var(--muted);margin:2px 0 7px"},[ (p.tel||"")+(p.email?((p.tel?" · ":"")+p.email):"") ]),
+      h("div",{style:"font-size:11px;color:#5d6f91;word-break:break-all;margin-bottom:9px"},[ "Upload-Link: "+(p.url||"—") ]),
+      h("div",{style:"display:flex;gap:8px;flex-wrap:wrap"},[ copyBtn, openBtn, editBtn, delBtn ])
+    ]));
+  });
+
+  const exportBtn=h("button",{class:"mini"},["Sichern (Datei)"]);
+  exportBtn.addEventListener("click",()=>{
+    try{ const blob=new Blob([JSON.stringify(loadPartners(),null,2)],{type:"application/json"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="FinanzCloud-Partner.json"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000); toast("Partnerliste gesichert"); }catch(e){ toast("Sichern nicht möglich"); }
+  });
+  const importIn=h("input",{type:"file",accept:"application/json",style:"display:none"});
+  importIn.addEventListener("change",()=>{ const f=importIn.files&&importIn.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ try{ const arr=JSON.parse(r.result); if(Array.isArray(arr)){ savePartners(arr); toast("Partnerliste geladen"); render(); } else toast("Ungültige Datei"); }catch(e){ toast("Datei konnte nicht gelesen werden"); } }; r.readAsText(f); });
+  const importBtn=h("button",{class:"mini"},["Wiederherstellen"]);
+  importBtn.addEventListener("click",()=>importIn.click());
+
+  return h("div",{class:"screen"},[
+    h("div",{class:"eyebrow"},["Intern · Partner-Verwaltung"]),
+    h("h2",{style:"font-size:24px"},["Geschäftspartner verwalten"]),
+    h("p",{class:"lead"},["Lege je Partner Name, Kontakt und seinen Upload-Link an. Du bekommst einen personalisierten App-Link – wer ihn öffnet, sieht überall diskret die Partnerdaten, lädt über dessen Link hoch und bekommt den Kontakt aufs PDF."]),
+    card, listCard,
+    h("div",{style:"display:flex;gap:8px;justify-content:center;margin-top:14px"},[ exportBtn, importBtn, importIn ]),
+    h("p",{class:"foot"},["Gespeichert wird lokal in diesem Browser. Über die Schaltfläche Sichern kannst du die Liste übertragen oder sichern."]),
+    h("button",{class:"back",style:"margin-top:10px",onClick:()=>{ state.partner=null; state.step="intro"; render(); }},["Zur App"])
+  ]);
+}
+
+function screenCloudPartner(){
+  const p=state.partner;
+  const card=h("div",{class:"card"});
+  ["Alle Verträge digital an einem Ort","Direkt sicher in unserer FinanzCloud gespeichert","Automatisch ausgewertet – Leistungen & Sparpotenzial","Deine Beratung optimal vorbereitet"]
+    .forEach(t=>card.appendChild(h("div",{class:"row"},[ h("span",{class:"rl"},["✓ "+t]) ])));
+  card.appendChild(h("div",{class:"row"},[ h("span",{class:"rl"},["🎁 Startguthaben bei Einrichtung"]), h("span",{class:"ra",style:"color:var(--gold)"},["+"+eur(BONUS_CONFIG.start)]) ]));
+
+  const upCard=h("div",{class:"card"});
+  upCard.appendChild(h("div",{class:"sublabel"},["Deine Unterlagen"]));
+  upCard.appendChild(h("div",{style:"font-family:Space Grotesk;font-weight:700;font-size:16px;color:var(--txt)"},["Verträge jetzt hochladen"]));
+  upCard.appendChild(h("p",{style:"font-size:12.5px;color:var(--muted);line-height:1.45;margin:4px 0 12px"},["Fotografiere deine Verträge – sie werden direkt sicher in unsere FinanzCloud übertragen und automatisch ausgewertet."]));
+  const goUp=h("button",{class:"btn gold"},[ state.cloudOn?"📷 Weitere Unterlagen hochladen":"📷 Unterlagen jetzt hochladen" ]);
+  goUp.addEventListener("click",()=>{ window.open(p.url,"_blank","noopener,noreferrer"); if(!state.cloudOn) state.cloudOn=true; toast("Upload geöffnet · +"+eur(BONUS_CONFIG.start)); renderScreenKeepStep(); });
+  upCard.appendChild(goUp);
+
+  const cta=h("button",{class:"btn",style:"margin-top:16px"},[ state.cloudOn?"Weiter zur Datenaufnahme":"Weiter zur Datenaufnahme" ]);
+  cta.addEventListener("click",()=>{ if(!nameComplete()){ nameToast(); return; } if(!state.cloudOn) state.cloudOn=true; next(); });
+
+  return h("div",{class:"screen"},[
+    blockNav("cloud"),
+    h("div",{class:"eyebrow"},["Schritt 1 · Deine Unterlagen"]),
+    h("h2",{style:"font-size:26px"},["FinanzCloud – Unterlagen hochladen"]),
+    h("p",{class:"lead"},["Lade zuerst deine Verträge sicher hoch – direkt in unsere FinanzCloud. Danach nehmen wir gemeinsam deine Eckdaten auf."]),
+    nameCard(), card, upCard, cta,
+    h("button",{class:"back",onClick:prev},["Zurück"])
+  ]);
+}
+
+
+function currentScreen(){
+  switch(state.step){
+    case "admin": return screenAdmin();
+    case "intro": return screenIntro();
+    case "typ": return screenTyp();
+    case "basis": return screenBasis();
+    case "rente": return screenRente();
+    case "eigentum": return screenEigentum();
+    case "vermoegen": return screenVermoegen();
+    case "invest": return screenInvest();
+    case "familie": return screenFamilie();
+    case "absicherung": return screenAbsicherung();
+    case "auswertung": return screenAuswertung();
+    case "steuer": return screenSteuer();
+    case "auto": return screenAuto();
+    case "partner": return screenPartner();
+    case "lead": return screenLead();
+    case "ki": return screenKi();
+    case "cloud": return screenCloud();
+    case "termin": return screenTermin();
+    case "empfehlung": return screenEmpfehlung();
+    default: return screenIntro();
+  }
+}
+function render(){
+  const app=document.getElementById("app");
+  app.innerHTML="";
+  if(state.step!=="intro" && state.step!=="admin") app.appendChild(header());
+  app.appendChild(currentScreen());
+  if(state.partner && state.step!=="admin" && state.step!=="intro"){
+    const p=state.partner;
+    const line="Dein Ansprechpartner: "+(p.name||"")+(p.tel?" · "+p.tel:"")+(p.email?" · "+p.email:"");
+    app.appendChild(h("div",{style:"max-width:520px;margin:4px auto 0;text-align:center;font-size:10.5px;color:#5d6f91;padding:0 20px 16px"},[line]));
+  }
+}
+// Neu rendern, ohne den Schritt zu wechseln (z. B. nach Bonus-Klick)
+function renderScreenKeepStep(){ render(); }
+
+initFromUrl();
+render();
+</script>
+</body>
+</html>
